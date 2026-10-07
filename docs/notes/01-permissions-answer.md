@@ -22,3 +22,7 @@ Docs: https://code.claude.com/docs/en/cloud-environments#network-access
 - To test something that only happens over HTTP rather than `file://` (for example caching or font loading).
 
 For playing, testing balance or fuzzing the UI, the local file is enough.
+
+## Update
+
+Done: the host was added in the Claude environment settings (not on GitHub), and the live site now loads. See [09-live-site-check.md](09-live-site-check.md).

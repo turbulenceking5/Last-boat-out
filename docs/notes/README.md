@@ -12,5 +12,6 @@ Notes from a Claude Code cloud session that was asked how to give Claude permiss
 | [06-test-results.md](06-test-results.md) | Balance simulation results from this session |
 | [07-findings.md](07-findings.md) | Things noticed along the way |
 | [08-next-steps.md](08-next-steps.md) | What to do next, with or without network access |
+| [09-live-site-check.md](09-live-site-check.md) | Loading the live GitHub Pages site after the network change |
 
 Screenshots taken during the session are in [screens/](screens/).

@@ -12,4 +12,4 @@
 
 ## Needs a network change
 
-- Allow `turbulenceking5.github.io` (see [01-permissions-answer.md](01-permissions-answer.md)), then compare the deployed page with `index.html` on `main`.
+- Done: the live site is allowed and matches `index.html` (see [09-live-site-check.md](09-live-site-check.md)).

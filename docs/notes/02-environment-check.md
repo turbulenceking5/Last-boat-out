@@ -8,7 +8,7 @@ Checked at the start of the session (2026-10-07).
 | Playwright | 1.56.1, installed globally (`NODE_PATH=$(npm root -g)`) |
 | Chromium | Pre-installed under `/opt/pw-browsers` |
 | `registry.npmjs.org` | Reachable (200) |
-| `turbulenceking5.github.io` | **Blocked** by the network policy (403 on CONNECT) |
+| `turbulenceking5.github.io` | Blocked at first (403 on CONNECT); reachable after it was added to Allowed domains |
 | Google Fonts | Reachable; the game's fonts loaded with no failed requests |
 
 ## What this means
