@@ -527,7 +527,7 @@ function endTurn(){
       if(nbrs(id).length)log(`Panic spreads from ${name(id)} to ${nbrs(id).filter(b=>!fallen(b)).map(name).join(', ')||'nowhere'}.`,'bad');
     }
     else if(!infectedState(before[id])&&before[id]!=='fallen'&&infectedState(now))log(`Outbreak at ${name(id)}.`,'bad');
-    else if((infectedState(before[id])||before[id]==='fallen')&&!infectedState(now)&&now!=='fallen'){log(`${name(id)} is clear of infection.`,'good');n.wasFallen=false;morale(1,3);}
+    else if((infectedState(before[id])||before[id]==='fallen')&&!infectedState(now)&&now!=='fallen'&&now!=='cleared'){log(`${name(id)} is clear of infection.`,'good');n.wasFallen=false;morale(1,3);}
   }
   for(const p of S.promises){if(p.done)continue;
     const fail=fallen(p.id)||(p.kind==='evac'&&t+1>=p.until&&N(p.id).pop>=1);
