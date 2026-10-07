@@ -192,6 +192,79 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
   .side .placewrap{display:none}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* after-action report and service record (end screen, setup record) */
+:root{--aar-saved:#4d9cc9;--aar-lost:#e0703f;--aar-stranded:#7d8580}
+.card.aar{width:min(760px,100%)}
+.aar-hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 20px;align-items:center;background:rgba(0,0,0,.25);border-radius:4px;padding:12px 14px}
+.aar-pct b{display:block;font:600 40px/1 var(--font-num);font-variant-numeric:tabular-nums}
+.aar-pct span{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.aar-grade{min-width:0}
+.aar-ladder .track{position:relative;height:10px;background:rgba(226,220,200,.1);border-radius:2px;margin-top:6px}
+.aar-ladder .fill{position:absolute;left:0;top:0;bottom:0;background:var(--aar-saved);border-radius:2px 0 0 2px}
+.aar-ladder .track i{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--amber)}
+.aar-ladder .track em{position:absolute;top:-6px;width:12px;height:22px;margin-left:-6px;border-radius:2px;background:var(--ink);border:2px solid var(--panel)}
+.aar-ladder .ticks{position:relative;height:18px;font:600 11px var(--font-num);color:var(--amber)}
+.aar-ladder .ticks span{position:absolute;top:5px;transform:translateX(-50%)}
+.aar-gap{margin:6px 0 0;font-size:14px;color:var(--ink)}
+.aar-ledger{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 20px}
+.aar-ledger ul{list-style:none;padding:0;margin:6px 0 0;display:flex;flex-direction:column;gap:8px}
+.aar-ledger li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;align-items:end}
+.aar-ledger .lbl{font-size:14.5px;min-width:0}
+.aar-ledger .lbl small{display:block;font-size:12px;color:var(--muted)}
+.aar-ledger li b{font:600 17px var(--font-num);font-variant-numeric:tabular-nums}
+.aar-ledger .bar{grid-column:1/-1;height:5px;background:rgba(226,220,200,.08);border-radius:2px;overflow:hidden}
+.aar-ledger .bar span{display:block;height:100%;min-width:1px;border-radius:0 2px 2px 0}
+.aar-ledger .sv,.aar-legend .sv{background:var(--aar-saved)}
+.aar-ledger .ls,.aar-legend .ls{background:var(--aar-lost)}
+.aar-ledger .st{background:var(--aar-stranded)}
+.aar-legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted)}
+.aar-legend span{display:inline-flex;align-items:center;gap:6px}
+.aar-legend i{width:14px;height:3px;border-radius:2px}
+.aar-chart{display:block;width:100%;height:auto;overflow:visible}
+.aar-chart .gl{stroke:var(--line)}
+.aar-chart .ax{font:500 11px var(--font-num);fill:var(--muted)}
+.aar-chart .dl{font:600 12px var(--font-num);fill:var(--ink)}
+.aar-chart .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.aar-chart .ln.sv{stroke:var(--aar-saved)}.aar-chart .ln.ls{stroke:var(--aar-lost)}
+.aar-chart .dot{stroke:var(--panel);stroke-width:2}
+.aar-chart .dot.sv{fill:var(--aar-saved)}.aar-chart .dot.ls{fill:var(--aar-lost)}
+.aar-chart .hit{fill:transparent}
+.aar-chart .hit:hover{fill:rgba(226,220,200,.06)}
+.aar-table summary{cursor:pointer;font-size:13px;color:var(--muted)}
+.aar-table table{border-collapse:collapse;margin-top:6px;font:13px var(--font-num);width:100%;max-width:420px}
+.aar-table th,.aar-table td{text-align:right;padding:3px 8px;border-bottom:1px solid var(--line);font-weight:400}
+.aar-table th[scope=row],.aar-table thead th:first-child{text-align:left;font-family:var(--font-ui)}
+.aar-table thead th{color:var(--muted);font-weight:600}
+.card ol.aar-tl{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.aar-tl li{position:relative;font-size:14.5px;display:flex;flex-direction:column}
+.aar-tl li::before{content:'';position:absolute;left:-20px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--blood);border:2px solid var(--panel)}
+.aar-tl li.key::before{background:var(--amber)}
+.aar-tl li.bad{color:#eaa092}.aar-tl li.key{color:var(--amber)}
+.aar-tl time{font:600 11px var(--font-num);color:var(--muted);letter-spacing:.04em}
+.aar-pb{margin:0;font-size:14.5px}
+.card ul.aar-runs{list-style:none;padding:0;gap:4px}
+.aar-runs li{display:grid;grid-template-columns:4.5em minmax(0,1fr) auto;gap:2px 10px;align-items:center;background:rgba(0,0,0,.2);border:1px solid var(--line);border-radius:4px;padding:6px 9px;font-size:13.5px}
+.aar-runs li.cur{border-color:var(--amber)}
+.aar-runs .when{font:500 12px var(--font-num);color:var(--muted)}
+.aar-runs .what{min-width:0;overflow-wrap:anywhere}
+.aar-runs b{font:600 15px var(--font-num)}
+.aar-runs .grade{grid-column:2/-1;color:var(--muted);font-size:12.5px}
+.aar-runs .btn{grid-column:3;grid-row:1/3;min-height:36px;padding:6px 10px}
+.aar-runs li:has(.btn){grid-template-columns:4.5em minmax(0,1fr) auto auto}
+.aar-runs li:has(.btn) .grade{grid-column:2/4}
+.aar-runs li:has(.btn) .btn{grid-column:4}
+.aar-seed{font-family:var(--font-num);color:var(--ink)}
+.aar-share{display:flex;flex-direction:column;gap:4px}
+.aar-share input{width:100%;background:var(--panel-2);border:1px solid rgba(226,220,200,.25);border-radius:4px;padding:8px 10px;font:13px var(--font-num)}
+.aar-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.aar-live{margin:0;font-size:13px;color:var(--good);min-height:0}
+.aar-live:empty{display:none}
+@media (max-width:480px){
+  .aar-hero{grid-template-columns:minmax(0,1fr)}
+  .aar-pct b{font-size:34px}
+  .aar-ledger{grid-template-columns:minmax(0,1fr)}
+}
 </style>
 <style>[hidden]{display:none!important}body{margin:0}:root{padding-top:env(safe-area-inset-top,0px)}</style>
 </head>
@@ -573,6 +646,7 @@ function finish(why){
     {name:'Every promise kept',won:S.promises.length>0&&S.promises.every(p=>p.done==='kept')},
   ];
   S.over={why,sheltered:sh,saved,pct,grade,turn:S.turn,milSaved:timeUp?mil.saved:0,milLost:timeUp?mil.lost:S.mobilized,stranded:stranded(),medals};
+  aarFinish(timeUp);
   UI.showReport=false;UI.undo=[];
 }
 
@@ -873,20 +947,12 @@ function renderOverlay(){
         <button class="btn" data-act="setopt" data-k="scenario" data-v="random" aria-pressed="${st.scenario==='random'}">Random outbreak<small>A different city, port capacities, storm damage and event timing.</small></button></div>
       <h3>Difficulty</h3><div class="seg">${Object.entries(DIFFS).map(([key,d])=>`<button class="btn" data-act="setopt" data-k="diff" data-v="${key}" aria-pressed="${st.diff===key}">${d.name}<small>${d.desc}</small></button>`).join('')}</div>
       <h3>Seed</h3><div class="field"><input id="seedinput" inputmode="numeric" placeholder="Random" value="${st.seed??''}" aria-label="Campaign seed"><span class="note">Enter a seed to replay or share a campaign.</span></div>
+      ${setupRecord(st)}
       <div class="choices"><button class="btn primary" data-act="start" id="startbtn">Take command</button>${S&&!S.over&&UI.setup.canCancel?'<button class="btn" data-act="cancelsetup">Back to the current campaign</button>':''}</div></div>`;
   } else if(UI.help){
     html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="hh"><span class="eyebrow">Field manual</span><h2 id="hh">How to play</h2>${HELP}<div class="choices"><button class="btn primary" data-act="closehelp">Back to the map</button></div></div>`;
   } else if(S.over){
-    const v=S.over;
-    const txt={capital:'Aldermoor has fallen. The government is gone and with it the chain of command. Whatever is left of the army fights on in pockets, but the war is over.',confidence:'The cabinet has lost faith in you. You are relieved of command and flown out on the next ship. Someone else will make the last decisions.',ports:'The last port has fallen. There is nowhere left to send anyone.'}[v.why]||(v.pct>=58?'The last ships sail at dawn on Day 13, packed to the rails. Behind you, the line still holds. History will be kind to you.':v.pct>=46?'The last ships sail at dawn on Day 13. You got more people out than anyone had a right to expect, and the line held where it mattered.':v.pct>=32?'The last ships sail at dawn on Day 13, with room to spare that nobody could reach in time.':'The last ships sail at dawn on Day 13, half empty. Most of Vessmark never made it to the coast.');
-    const worst=S.moments.slice().sort((a,b)=>b.sev-a.sev).slice(0,3);
-    html=`<div class="card ${v.why==='time'&&v.pct>=32?'':'red'}" role="dialog" aria-modal="true" aria-labelledby="oh"><span class="eyebrow">${when(v.turn)} · After-action report · ${DIFFS[S.diff].name}</span><h2 id="oh">${esc(v.grade)}</h2><p class="body">${txt}</p>
-      <div class="stats"><div><b>${Math.round(v.pct)}%</b><span>of ${Math.round(TOTAL_POP).toLocaleString()} thousand saved</span></div><div><b>${kp(S.evacuated)}</b><span>Evacuated by sea</span></div><div><b>${kp(v.sheltered+(v.milSaved||0))}</b><span>Credited behind your lines</span></div><div><b>${kp(v.stranded)}</b><span>Still alive in infected zones</span></div><div><b>${kp(S.lost+(v.milLost||0))}</b><span>Lost</span></div></div>
-      <h3>Honours</h3><div class="medals">${v.medals.map(m=>`<span class="medal ${m.won?'won':''}">${m.won?'★ ':''}${esc(m.name)}</span>`).join('')}</div>
-      ${worst.length?`<h3>Hardest moments</h3><ul>${worst.map(m=>`<li class="bad">${when(m.t)}: ${esc(m.text)}</li>`).join('')}</ul>`:''}
-      <h3>What became of them</h3><ul>${epilogue().map(l=>`<li>${esc(l)}</li>`).join('')}</ul>
-      <p class="note">Seed ${S.seed} · ${S.scenario==='random'?'Random outbreak':'Kessler'} scenario. Enter this seed in a new campaign to replay it.</p>
-      <div class="choices"><button class="btn primary" data-act="restart" id="restart">Start a new campaign</button></div></div>`;
+    html=aarCard();
   } else if(S.events.length){
     const ev=EVENTS.find(e=>e.id===S.events[0]);
     html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="evh"><span class="eyebrow">${esc(ev.eyebrow)}</span><h2 id="evh">${esc(evTitle(ev))}</h2><p class="body">${esc(ev.body())}</p>${ev.help?HELP:''}
@@ -909,6 +975,159 @@ function epilogue(){
   if(kept||broke)out.push(`You kept ${kept} of ${kept+broke} promise${kept+broke===1?'':'s'}. ${broke?'People remember the ones you broke.':'People remember that.'}`);
   return out;
 }
+/* ---------- after-action report, campaign history and service record ---------- */
+// Grade bands mirror finish(). They are only read here, to show how close a campaign came to the next grade.
+const AAR_GRADES=[[58,'Saviour of Vessmark'],[46,'An orderly withdrawal'],[32,'A bitter retreat'],[0,'Catastrophe']];
+const RECORD_KEY='lastboat_record_v1',RECORD_MAX=100;
+const SCEN_NAME={kessler:'Kessler',random:'Random outbreak'};
+const scName=s=>SCEN_NAME[s]||String(s);
+const dfName=d=>(DIFFS[d]&&DIFFS[d].name)||String(d);
+const p1=v=>(Math.round(v*10)/10).toFixed(1);
+// One point per turn: cumulative shipped out, lost and waiting on the quays.
+function histPoint(){
+  if(!S)return;if(!Array.isArray(S.hist))S.hist=[];
+  let q=0;for(const id of PORTS)q+=N(id).queue;
+  const pt={t:S.turn,ev:S.evacuated,lost:S.lost,q},last=S.hist[S.hist.length-1];
+  if(last&&last.t===S.turn)S.hist[S.hist.length-1]=pt;else S.hist.push(pt);
+}
+// Recorded from outside the simulation: endTurn is wrapped so every caller (button, key, tests) adds a point.
+endTurn=(base=>function(){const t=S&&S.turn;const r=base.apply(this,arguments);if(S&&(S.turn!==t||S.over))histPoint();return r;})(endTurn);
+// Called once from finish(): extra data for the report, and the campaign goes into the service record.
+function aarFinish(timeUp){
+  const v=S.over;let q=0;
+  if(timeUp)for(const id in P)if(held(id)&&!fallen(id))q+=N(id).queue;
+  v.quayRaw=q;v.quay=q*.75;
+  v.id=`${S.seed}-${S.scenario}-${S.diff}-${Date.now().toString(36)}${Math.floor(Math.random()*1e6).toString(36)}`;
+  v.date=new Date().toISOString();
+  histPoint();
+  v.prevBest=bestFor(S.scenario,S.diff);
+  v.recorded=recordRun(v);
+}
+function recRead(){try{const a=JSON.parse(localStorage.getItem(RECORD_KEY)||'[]');return Array.isArray(a)?a.filter(r=>r&&typeof r.pct==='number'&&r.id):[];}catch(e){return [];}}
+function bestFor(sc,diff,runs=recRead()){let b=null;for(const r of runs)if(r.scenario===sc&&r.diff===diff&&(!b||r.pct>b.pct))b=r;return b;}
+function recordRun(v){
+  const runs=recRead();if(runs.some(r=>r.id===v.id))return true;
+  runs.push({id:v.id,scenario:S.scenario,diff:S.diff,seed:S.seed,pct:Math.round(v.pct*10)/10,grade:v.grade,why:v.why,turn:v.turn,date:v.date});
+  if(runs.length>RECORD_MAX){
+    // Drop the oldest runs first, but never a personal best.
+    const keep=new Set();for(const r of runs){const b=bestFor(r.scenario,r.diff,runs);if(b)keep.add(b.id);}
+    while(runs.length>RECORD_MAX){const i=runs.findIndex(r=>!keep.has(r.id));if(i<0)break;runs.splice(i,1);}
+  }
+  try{localStorage.setItem(RECORD_KEY,JSON.stringify(runs));return true;}catch(e){return false;}
+}
+function runDate(r){try{const d=new Date(r.date);return isNaN(d)?'':d.toLocaleDateString(undefined,{day:'numeric',month:'short'});}catch(e){return '';}}
+function runRow(r,cur,btn){
+  return `<li class="${cur?'cur':''}"><span class="when">${esc(runDate(r))}</span><span class="what">${esc(scName(r.scenario))} · ${esc(dfName(r.diff))} · seed ${esc(r.seed)}${cur?' · this campaign':''}</span><b>${esc(Math.round(r.pct))}%</b><span class="grade">${esc(r.grade)}</span>${btn?`<button class="btn" data-act="userun" data-id="${esc(r.id)}" aria-label="Use seed ${esc(r.seed)}, ${esc(scName(r.scenario))}, ${esc(dfName(r.diff))}">Use seed</button>`:''}</li>`;
+}
+function gradeLadder(v){
+  const pct=v.pct,max=Math.min(100,Math.max(75,Math.ceil(pct/5)*5+5)),pos=x=>`${clamp(x/max*100,0,100)}%`;
+  const cur=AAR_GRADES.find(g=>pct>=g[0]),next=AAR_GRADES.filter(g=>g[0]>pct).pop();
+  let gap;
+  if(v.why!=='time')gap='The campaign ended before the last ships sailed, so only people already at sea count, and the grade reflects how it ended.';
+  else if(next)gap=`<b>${p1(next[0]-pct)} points</b> short of “${esc(next[1])}” (${next[0]}%).${cur[0]>0?` ${p1(pct-cur[0])} points clear of the ${cur[0]}% bar.`:''}`;
+  else gap=`<b>${p1(pct-cur[0])} points</b> above the ${cur[0]}% bar for the top grade.`;
+  const bands=AAR_GRADES.filter(g=>g[0]>0);
+  return `<div class="aar-ladder" role="img" aria-label="${p1(pct)}% saved. Grade bars at ${bands.map(g=>g[0]+'%').reverse().join(', ')}.">
+      <div class="track"><div class="fill" style="width:${pos(pct)}"></div>${bands.map(g=>`<i style="left:${pos(g[0])}" title="${esc(g[1])}"></i>`).join('')}<em style="left:${pos(pct)}"></em></div>
+      <div class="ticks">${bands.map(g=>`<span style="left:${pos(g[0])}">${g[0]}%</span>`).join('')}</div>
+    </div><p class="aar-gap">${gap}</p>`;
+}
+function ledger(v){
+  const timeUp=v.why==='time',quay=v.quay||0,home=Math.max(0,(v.sheltered||0)-quay),mil=v.milSaved||0;
+  const bar=(x,c)=>`<span class="bar"><span class="${c}" style="width:${clamp(x/TOTAL_POP*100,0,100).toFixed(2)}%"></span></span>`;
+  const row=(label,sub,x,c)=>`<li><span class="lbl">${label}${sub?`<small>${sub}</small>`:''}</span><b>${x<.05?'0':kp(x)}</b>${bar(x,c)}</li>`;
+  const saved=[row('Shipped out','Counted in full',S.evacuated,'sv')];
+  if(timeUp||quay>.05)saved.push(row('On the quay',`${(v.quayRaw||0)<.05?'Nobody':kp(v.quayRaw)} still waiting, counted at 75%`,quay,'sv'));
+  if(timeUp||home>.05)saved.push(row('Sheltered behind the line','Still at home in held places, counted at 50%',home,'sv'));
+  if(timeUp||mil>.05)saved.push(row('Militia','Surviving volunteers, counted at 50%',mil,'sv'));
+  return `<div class="aar-ledger"><div><h3>Saved · ${v.saved<.05?'0':kp(v.saved)}</h3><ul>${saved.join('')}</ul></div>
+    <div><h3>Not saved</h3><ul>${row('Lost','Killed or turned, militia included',S.lost+(v.milLost||0),'ls')}${row('Still in infected zones','Alive behind the outbreak, not counted',v.stranded||0,'st')}</ul>${timeUp?'':'<p class="note">Only people already at sea count when a campaign ends early.</p>'}</div></div>`;
+}
+function niceMax(v){const e=Math.pow(10,Math.floor(Math.log10(v/4)));for(const m of [1,1.5,2,2.5,3,4,5,6,8,10])if(m*e*4>=v)return m*e*4;return 40*e;}
+function aarChart(){
+  let h=(S.hist||[]).filter(p=>p&&Number.isFinite(p.t)&&Number.isFinite(p.ev)&&Number.isFinite(p.lost));
+  if(h.length&&h[0].t===1)h=[{t:0,ev:0,lost:0,q:0},...h];
+  if(h.length<3)return '';
+  const phone=matchMedia('(max-width:700px)').matches;
+  const W=phone?340:700,H=phone?200:230,ml=phone?40:46,mr=phone?74:96,mt=12,mb=24,pw=W-ml-mr,ph=H-mt-mb;
+  const maxT=Math.max(TURNS,h[h.length-1].t),top=niceMax(Math.max(1,...h.map(p=>Math.max(p.ev,p.lost))));
+  const x=t=>ml+t/maxT*pw,y=v=>mt+ph-v/top*ph;
+  const line=key=>h.map((p,i)=>`${i?'L':'M'}${x(p.t).toFixed(1)} ${y(p[key]).toFixed(1)}`).join(' ');
+  const grid=[0,1,2,3,4].map(i=>{const v=top*i/4;return `<line class="gl" x1="${ml}" x2="${ml+pw}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${ml-6}" y="${y(v)+4}" text-anchor="end">${v?kp(v):'0'}</text>`;}).join('');
+  const days=[];for(let t=0;t<=maxT;t+=phone?8:4)days.push(`<text class="ax" x="${x(t)}" y="${H-6}" text-anchor="middle">Day ${t/2+1}</text>`);
+  const end=h[h.length-1];let yl=y(end.lost),ye=y(end.ev);
+  if(Math.abs(yl-ye)<15){if(yl<=ye)ye=yl+15;else yl=ye+15;}
+  const hits=h.map((p,i)=>{const x0=i?(x(h[i-1].t)+x(p.t))/2:ml,x1=i<h.length-1?(x(p.t)+x(h[i+1].t))/2:ml+pw;return `<rect class="hit" x="${x0}" y="${mt}" width="${Math.max(1,x1-x0)}" height="${ph}"><title>${when(p.t)}: ${kp(p.ev)} shipped out, ${kp(p.lost)} lost</title></rect>`;}).join('');
+  const sum=`Shipped out rose to ${kp(end.ev)} and losses to ${kp(end.lost)} by ${when(end.t)}.`;
+  const rows=h.filter((p,i)=>p.t%2===0||i===h.length-1).map(p=>`<tr><th scope="row">${when(p.t)}</th><td>${kp(p.ev)}</td><td>${kp(p.lost)}</td></tr>`).join('');
+  return `<h3>The campaign, turn by turn</h3>
+    <div class="aar-legend" aria-hidden="true"><span><i class="sv"></i>Shipped out (running total)</span><span><i class="ls"></i>Lost (running total)</span></div>
+    <svg class="aar-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(sum)}">${grid}${days.join('')}
+      <path class="ln ls" d="${line('lost')}"/><path class="ln sv" d="${line('ev')}"/>
+      <circle class="dot ls" cx="${x(end.t)}" cy="${y(end.lost)}" r="4"/><circle class="dot sv" cx="${x(end.t)}" cy="${y(end.ev)}" r="4"/>
+      <text class="dl" x="${x(end.t)+8}" y="${yl+4}">Lost ${kp(end.lost)}</text><text class="dl" x="${x(end.t)+8}" y="${ye+4}">Shipped ${kp(end.ev)}</text>${hits}</svg>
+    <details class="aar-table"><summary>Show as a table</summary><table><thead><tr><th scope="col">When</th><th scope="col">Shipped out</th><th scope="col">Lost</th></tr></thead><tbody>${rows}</tbody></table></details>`;
+}
+function aarTimeline(v){
+  const m=(S.moments||[]).map((x,i)=>Object.assign({i},x)).sort((a,b)=>b.sev-a.sev).slice(0,5).sort((a,b)=>a.t-b.t||a.i-b.i);
+  if(!m.length)return '';
+  const endTxt={capital:'Aldermoor falls. The campaign is over.',confidence:'You are relieved of command.',ports:'The last port falls.'}[v.why]||'The last ships sail.';
+  return `<h3>Turning points</h3><ol class="aar-tl">${m.map(x=>`<li class="bad"><time>${when(x.t)}</time><span>${esc(x.text)}</span></li>`).join('')}<li class="key"><time>${when(v.turn)}</time><span>${endTxt}</span></li></ol>`;
+}
+function aarRecord(v){
+  const runs=recRead(),has=runs.some(r=>r.id===v.id);
+  if(!has&&!v.recorded)return `<h3>Service record</h3><p class="note">Your service record is not being kept: this browser is not allowing local storage.</p>`;
+  const combo=`${scName(S.scenario)} · ${dfName(S.diff)}`,pb=v.prevBest,mine=Math.round(v.pct*10)/10;
+  const line=!pb?`Your first campaign on record for ${esc(combo)}.`:mine>pb.pct?`<b class="good">New personal best</b> for ${esc(combo)}, up from ${esc(pb.pct)}% (seed ${esc(pb.seed)}).`:`Personal best for ${esc(combo)}: <b>${esc(Math.round(pb.pct))}%</b>, ${esc(pb.grade)}, seed ${esc(pb.seed)}.`;
+  const recent=runs.slice(-5).reverse();
+  return `<h3>Service record</h3><p class="aar-pb">${line}</p>${recent.length?`<ul class="aar-runs">${recent.map(r=>runRow(r,r.id===v.id,false)).join('')}</ul>`:''}`;
+}
+function setupRecord(st){
+  const runs=recRead();if(!runs.length)return '';
+  const combo=`${scName(st.scenario)} · ${dfName(st.diff)}`,pb=bestFor(st.scenario,st.diff,runs);
+  return `<h3>Service record</h3><p class="aar-pb">${pb?`Best on ${esc(combo)}: <b>${esc(Math.round(pb.pct))}%</b>, ${esc(pb.grade)}, seed ${esc(pb.seed)}.`:`No campaigns on record for ${esc(combo)} yet.`} ${runs.length} campaign${runs.length===1?'':'s'} on record.</p>
+    <ul class="aar-runs">${runs.slice(-4).reverse().map(r=>runRow(r,false,true)).join('')}</ul>`;
+}
+function shareText(){
+  const v=S.over,url=/^https?:/.test(location.protocol)?' '+location.href.split('#')[0]:'';
+  return `Last Boat to Calder · ${scName(S.scenario)} · ${dfName(S.diff)} · seed ${S.seed}: I saved ${Math.round(v.pct)}% of Vessmark (${v.grade}). Enter the seed in a new campaign to play the same outbreak.${url}`;
+}
+function copyShare(){
+  const txt=shareText(),id=S.over.id;
+  const done=ok=>{
+    UI.share={id,ok,manual:!ok};render();
+    if(!ok){const i=$('#sharetext');if(i){i.focus({preventScroll:true});i.select();try{if(document.execCommand('copy')){UI.share.ok=true;render();}}catch(e){}}}
+    const f=ok||UI.share.ok?$('#overlay [data-act="copyseed"]'):$('#sharetext');if(f)f.focus({preventScroll:true});if(f&&f.select)f.select();
+  };
+  try{if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(txt).then(()=>done(true),()=>done(false));else done(false);}catch(e){done(false);}
+}
+function aarCard(){
+  const v=S.over;
+  const txt={capital:'Aldermoor has fallen. The government is gone and with it the chain of command. Whatever is left of the army fights on in pockets, but the war is over.',confidence:'The cabinet has lost faith in you. You are relieved of command and flown out on the next ship. Someone else will make the last decisions.',ports:'The last port has fallen. There is nowhere left to send anyone.'}[v.why]||(v.pct>=58?'The last ships sail at dawn on Day 13, packed to the rails. Behind you, the line still holds. History will be kind to you.':v.pct>=46?'The last ships sail at dawn on Day 13. You got more people out than anyone had a right to expect, and the line held where it mattered.':v.pct>=32?'The last ships sail at dawn on Day 13, with room to spare that nobody could reach in time.':'The last ships sail at dawn on Day 13, half empty. Most of Vessmark never made it to the coast.');
+  const sh=UI.share&&UI.share.id===v.id?UI.share:null;
+  return `<div class="card aar ${v.why==='time'&&v.pct>=32?'':'red'}" role="dialog" aria-modal="true" aria-labelledby="oh"><span class="eyebrow">${when(v.turn)} · After-action report · ${esc(scName(S.scenario))} · ${esc(dfName(S.diff))}</span><h2 id="oh">${esc(v.grade)}</h2><p class="body">${txt}</p>
+    <div class="aar-hero"><div class="aar-pct"><b>${Math.round(v.pct)}%</b><span>of ${Math.round(TOTAL_POP).toLocaleString()} thousand saved</span></div><div class="aar-grade">${gradeLadder(v)}</div></div>
+    ${ledger(v)}
+    ${aarChart()}
+    ${aarTimeline(v)}
+    <h3>Honours</h3><div class="medals">${v.medals.map(m=>`<span class="medal ${m.won?'won':''}">${m.won?'★ ':''}${esc(m.name)}</span>`).join('')}</div>
+    <h3>What became of them</h3><ul>${epilogue().map(l=>`<li>${esc(l)}</li>`).join('')}</ul>
+    ${aarRecord(v)}
+    <p class="note">Seed <b class="aar-seed">${esc(S.seed)}</b> · ${esc(scName(S.scenario))} scenario · ${esc(dfName(S.diff))}. Replay it, or share the seed so someone else can face the same outbreak.</p>
+    ${sh&&sh.manual?`<label class="aar-share"><span class="note">Copy this to share it:</span><input id="sharetext" readonly value="${esc(shareText())}"></label>`:''}
+    <div class="choices aar-actions"><button class="btn primary" data-act="restart" id="restart">Start a new campaign</button><button class="btn" data-act="replay" id="replay">Replay this seed<small>${esc(scName(S.scenario))} · ${esc(dfName(S.diff))} · seed ${esc(S.seed)}</small></button><button class="btn" data-act="copyseed" id="copyseed">${sh&&sh.ok?'Copied to the clipboard':'Copy seed to share'}<small>Seed, scenario, difficulty and your result</small></button></div>
+    <p class="aar-live" role="status">${sh?(sh.ok?'Share text copied to the clipboard.':'Copying was blocked. Select the text above to copy it.'):''}</p></div>`;
+}
+// Replay, share and service-record actions. The main click handler ignores these, so they live in their own listener.
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('[data-act]');if(!b||b.disabled||!S)return;
+  const a=b.dataset.act;
+  if(a==='replay'&&S.over&&!UI.setup){newGame({scenario:S.scenario,diff:S.diff,seed:S.seed});Object.assign(UI,{setup:null,help:false,sel:null,mode:null,showReport:false,share:null});render();}
+  else if(a==='copyseed'&&S.over&&!UI.setup)copyShare();
+  else if(a==='userun'&&UI.setup){const r=recRead().find(x=>x.id===b.dataset.id);if(!r)return;
+    if(SCEN_NAME[r.scenario])UI.setup.scenario=r.scenario;if(DIFFS[r.diff])UI.setup.diff=r.diff;UI.setup.seed=r.seed;render();
+    const i=$('#seedinput');if(i)i.focus({preventScroll:true});}
+});
 function render(){renderTop();renderMap();renderSide();renderOverlay();if(!UI.setup)save();}
 
 /* ---------- input ---------- */
