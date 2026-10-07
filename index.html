@@ -273,6 +273,7 @@ const DIFFS={
   veteran:{name:'Veteran',cp:4,rate:1,spark:1.2,ships:.85,desc:'4 orders a turn, faster spread, smaller ships.'},
 };
 const SPARK_P=[0,.3,.45,.6,.75,.85,.9];
+const GRADES=[58,46,32]; // % saved for: Saviour of Vessmark, An orderly withdrawal, A bitter retreat (below: Catastrophe)
 const ORIGINS=['kessler','northgate','ashford','marrow','brennan','torrin','harlow'];
 
 /* ---------- helpers ---------- */
@@ -506,7 +507,7 @@ function endTurn(){
   }
   // 7. ships sail
   for(const id of PORTS){const n=N(id);
-    if(fallen(id)){if(n.queue>.5){lose(id,n.queue);log(`${kp(n.queue)} people waiting on the quays at ${name(id)} are lost.`,'bad');moment(`${kp(n.queue)} people were lost on the quays at ${name(id)}.`,n.queue);}n.queue=0;continue;}
+    if(fallen(id)){lose(id,n.queue);if(n.queue>.5){log(`${kp(n.queue)} people waiting on the quays at ${name(id)} are lost.`,'bad');moment(`${kp(n.queue)} people were lost on the quays at ${name(id)}.`,n.queue);}n.queue=0;continue;}
     const cap=capOf(id)*(held(id)?1:.5);const m=Math.min(n.queue,cap);n.queue-=m;S.evacuated+=m;if(m>=.05)L.sailed[id]=m;
   }
   const sailed=Object.values(L.sailed).reduce((a,x)=>a+x,0);morale(0,Math.min(3,sailed/25));
@@ -526,7 +527,7 @@ function endTurn(){
       if(nbrs(id).length)log(`Panic spreads from ${name(id)} to ${nbrs(id).filter(b=>!fallen(b)).map(name).join(', ')||'nowhere'}.`,'bad');
     }
     else if(!infectedState(before[id])&&before[id]!=='fallen'&&infectedState(now))log(`Outbreak at ${name(id)}.`,'bad');
-    else if((infectedState(before[id])||before[id]==='fallen')&&!infectedState(now)&&now!=='fallen'){log(`${name(id)} is clear of infection.`,'good');n.wasFallen=false;morale(1,3);}
+    else if((infectedState(before[id])||before[id]==='fallen')&&!infectedState(now)&&now!=='fallen'&&now!=='cleared'){log(`${name(id)} is clear of infection.`,'good');n.wasFallen=false;morale(1,3);}
   }
   for(const p of S.promises){if(p.done)continue;
     const fail=fallen(p.id)||(p.kind==='evac'&&t+1>=p.until&&N(p.id).pop>=1);
@@ -561,7 +562,7 @@ function finish(why){
   for(const p of S.promises)if(!p.done&&p.kind==='port'){if(!fallen(p.id)){p.done='kept';}else p.done='broken';}
   const timeUp=why==='time',sh=timeUp?sheltered():0,mil=militiaFate();
   const saved=S.evacuated+sh+(timeUp?mil.saved:0),pct=saved/TOTAL_POP*100;
-  const grade=why==='capital'?'The government has fallen':why==='confidence'?'Relieved of command':why==='ports'?'No way out':pct>=58?'Saviour of Vessmark':pct>=46?'An orderly withdrawal':pct>=32?'A bitter retreat':'Catastrophe';
+  const grade=why==='capital'?'The government has fallen':why==='confidence'?'Relieved of command':why==='ports'?'No way out':pct>=GRADES[0]?'Saviour of Vessmark':pct>=GRADES[1]?'An orderly withdrawal':pct>=GRADES[2]?'A bitter retreat':'Catastrophe';
   let tot=0;for(const id in P)tot+=N(id).T;
   const medals=[
     {name:'Every port held',won:PORTS.every(id=>!fallen(id))},
@@ -629,9 +630,11 @@ const EVENTS=[
     choices:()=>[
       {label:'Fall back to Port Calder',sub:'Torrin’s garrison joins Calder, and Calder gains a level of fortification',go:()=>{N('calder').T+=N('torrin').T;N('torrin').T=0;N('calder').F=Math.min(3,N('calder').F+1);S.flags.varga='fellback';log('Camp Torrin is abandoned. Its garrison digs in at Port Calder.','key');}},
       {label:'Hold Torrin. Every day counts.',sub:'Torrin gains a level of fortification and 2 battalions from its reserve',go:()=>{N('torrin').F=Math.min(3,N('torrin').F+1);N('torrin').T+=2;S.flags.varga='held';log('Camp Torrin will hold. Varga arms his reserve and the engineers throw up another wall.','key');}}]},
-  {id:'march',turn:16,when:()=>{const s=biggestHorde();return s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
-    body:()=>{const s=biggestHorde();return `Reconnaissance flights report that the horde massed at ${name(s)}, about ${kp(N(s).H)} strong, is stirring. Analysts expect it to surge out along every open road on ${when(18)}. Anything it reaches will be hit hard.`;},
-    choices:()=>[{label:'Understood. Prepare the line.',go:()=>{const s=biggestHorde();S.march={from:s,at:17};log(`The ${name(s)} horde will march on ${when(18)}.`,'key');}}]},
+  // The march resolves in the endTurn of S.turn+1, so it is felt on when(S.turn+2). It can first qualify after turn 16, so schedule
+  // it from the turn it fires (a fixed turn 17 left late marches in the past: they never happened and the countdown went negative).
+  {id:'march',turn:16,when:()=>{const s=biggestHorde();return S.turn<=TURNS-2&&s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
+    body:()=>{const s=biggestHorde();return `Reconnaissance flights report that the horde massed at ${name(s)}, about ${kp(N(s).H)} strong, is stirring. Analysts expect it to surge out along every open road on ${when(S.turn+2)}. Anything it reaches will be hit hard.`;},
+    choices:()=>[{label:'Understood. Prepare the line.',go:()=>{const s=biggestHorde();S.march={from:s,at:S.turn+1};log(`The ${name(s)} horde will march on ${when(S.turn+2)}.`,'key');}}]},
   {id:'last',turn:22,eyebrow:'Day 12',title:'The last ships',
     body:()=>'The Admiralty signals: the last sailings leave at dawn on Day 13. Whoever is on the quays by then gets out. Everyone else stays behind your lines, or doesn’t.',
     choices:()=>[{label:'Then let’s fill them.',go:()=>{}}]},
