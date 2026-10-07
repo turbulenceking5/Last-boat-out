@@ -1,0 +1,12 @@
+{
+  "name": "last-boat-out",
+  "private": true,
+  "description": "Last Boat to Calder: a turn-based zombie outbreak command game in a single HTML file.",
+  "scripts": {
+    "balance": "node tests/sim.js index.html 40 nothing evacAll bEP strikeK crush cutKessler_bot",
+    "fuzz": "node tests/ui.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  }
+}

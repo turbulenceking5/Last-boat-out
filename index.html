@@ -1,0 +1,992 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A turn-based zombie outbreak command game: hold the line, move your army and get Vessmark's people onto the last ships.">
+<meta name="theme-color" content="#13171a">
+<title>Last Boat to Calder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a general's war-room. The paper atlas of Vessmark is the table; the dark field kit beside it holds orders, the selected place and the dispatch log. On a phone the map becomes a pannable window with a sticky command bar. One deliberate dark look. */
+:root{
+  color-scheme: dark;
+  --bg:#13171a; --panel:#1c2326; --panel-2:#252e32; --line:rgba(226,220,200,.13);
+  --ink:#e4dfcf; --muted:#98a096; --paper:#cdc7af; --map-ink:#3a3c31;
+  --amber:#e2a23a; --blood:#c4432f; --moss:#6f8a55; --sea:#71898c; --good:#8fb27a; --troop:#3d5a78;
+  --font-display:'Special Elite','Courier New',monospace;
+  --font-ui:'Barlow Semi Condensed','Arial Narrow',system-ui,sans-serif;
+  --font-num:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.45 var(--font-ui);padding-inline:16px;padding-block:14px 32px}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+
+.top{display:flex;flex-wrap:wrap;gap:10px 20px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 14px}
+.brand{font:22px/1 var(--font-display);white-space:nowrap}
+.brand small{display:block;font:600 11px/1.4 var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.stat{display:flex;flex-direction:column;min-width:0}
+.stat span{font:600 11px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.stat b{font:600 17px var(--font-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+.good{color:var(--good)}.bad{color:#ec9a8b}.warn{color:var(--amber)}
+.cp{display:flex;gap:4px;margin-top:4px}
+.cp i{width:14px;height:14px;border-radius:2px;border:1.5px solid var(--amber)}
+.cp i.on{background:var(--amber)}
+.cp i.gone{border-color:#555;border-style:dashed}
+.gauge{width:84px}
+.gauge .tr{height:7px;background:rgba(0,0,0,.4);border-radius:2px;overflow:hidden;margin-top:5px}
+.gauge .fl{height:100%;background:var(--good)}
+.gauge .fl.mid{background:var(--amber)}.gauge .fl.low{background:var(--blood)}
+.spacer{flex:1}
+.topbtns{display:flex;gap:6px;align-items:center}
+.endturn{background:var(--amber);color:#1b1608;border:0;border-radius:4px;padding:10px 18px;font-weight:700;letter-spacing:.04em}
+.endturn small{display:block;font:500 11px var(--font-num);opacity:.8}
+
+.ticker{display:flex;gap:10px;align-items:baseline;background:#0f1214;border:1px solid var(--line);border-radius:6px;padding:8px 14px;min-width:0}
+.ticker .tag{font:600 11px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--blood);padding:2px 6px;border-radius:2px;white-space:nowrap}
+.ticker p{margin:0;font:14px/1.4 var(--font-display);min-width:0;flex:1}
+
+.main{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(330px,1fr);gap:12px;align-items:start}
+@media (max-width:960px){.main{grid-template-columns:minmax(0,1fr)}}
+.mapbox{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:8px;min-width:0;position:relative}
+.mapscroll{overflow:auto;border-radius:3px;max-width:100%;background:var(--sea);-webkit-overflow-scrolling:touch}
+svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea)}
+.mapwrap{position:relative;min-width:0}
+.zoom{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:4px;z-index:2}
+.zoom button{width:34px;height:34px;border-radius:4px;border:1px solid rgba(0,0,0,.35);background:rgba(28,35,38,.85);font-weight:700;font-size:18px;line-height:1}
+.land{fill:var(--paper);stroke:#58584a;stroke-width:1.5}
+.coastline{fill:none;stroke:#e6e1cf;stroke-opacity:.35;stroke-width:1.2}
+.grid{stroke:var(--map-ink);stroke-opacity:.07}
+.tree{fill:var(--moss);fill-opacity:.45}
+.river{fill:none;stroke:#7d9799;stroke-width:4;stroke-linecap:round}
+.contour{fill:none;stroke:#7a6e4f;stroke-opacity:.3}
+.road{stroke:#7a6646;stroke-width:2.6;stroke-linecap:round}
+.rail{stroke:#3a3c31;stroke-width:4}
+.rail-tie{stroke:var(--paper);stroke-width:2;stroke-dasharray:3 6}
+.cut{stroke:var(--blood);stroke-width:3;stroke-dasharray:5 5}
+.cutx{stroke:var(--blood);stroke-width:3.5;stroke-linecap:round}
+.edge-hit{stroke:transparent;stroke-width:22;cursor:pointer}
+.edge-pick{stroke:var(--amber);stroke-width:6;stroke-opacity:.9}
+.route{fill:none;stroke:#3f7d2c;stroke-width:5;stroke-dasharray:2 7;stroke-linecap:round;opacity:.9}
+.flow{stroke:#a3301f;stroke-width:3;fill:none;marker-end:url(#arr)}
+.flowlbl{font:700 12px var(--font-num);fill:#8e2414;paint-order:stroke;stroke:var(--paper);stroke-width:3.5}
+#arr path{fill:#a3301f}
+#carr path{fill:#2c3a24}
+.node{cursor:pointer}
+.node .disc{stroke:var(--map-ink);stroke-width:2}
+.node.secure .disc{fill:#f0ead6}
+.node.threat .disc{fill:#e9c76b}
+.node.holding .disc{fill:#eaa05e}
+.node.losing .disc{fill:#d0532c}
+.node.fallen .disc{fill:#24231f}
+.node.cleared .disc{fill:#9a9686}
+.node .horde{fill:var(--blood);fill-opacity:.22;stroke:var(--blood);stroke-width:2}
+.node .sel{fill:none;stroke:var(--amber);stroke-width:3.5}
+.node .target{fill:none;stroke:var(--amber);stroke-width:2.5;stroke-dasharray:4 4}
+.node .spark{fill:none;stroke:#a3301f;stroke-width:2;stroke-dasharray:2 4}
+.node .sparkmark{font:700 15px var(--font-num);fill:#a3301f;paint-order:stroke;stroke:var(--paper);stroke-width:3}
+.node text.name{font:700 16px var(--font-ui);fill:var(--map-ink);paint-order:stroke;stroke:var(--paper);stroke-width:5;stroke-linejoin:round}
+.node text.sub{font:600 12.5px var(--font-num);fill:#4b4a3c;paint-order:stroke;stroke:var(--paper);stroke-width:5;stroke-linejoin:round}
+.node text.sub tspan.inf{fill:#a3301f}
+.node .badge rect{fill:var(--troop);stroke:#1c2a38;stroke-width:1.2}
+.node .badge text{font:700 12px var(--font-num);fill:#fff}
+.node .portmark{fill:none;stroke:var(--map-ink);stroke-width:2}
+.node .evac{fill:var(--good);stroke:#2c3a24;stroke-width:1.2}
+.col line{stroke:#2c3a24;stroke-width:2.5;marker-end:url(#carr)}
+.col circle{fill:#fff;stroke:#2c3a24;stroke-width:1.5}
+.col text{font:700 11px var(--font-num);fill:#20301a;paint-order:stroke;stroke:#fff;stroke-width:3}
+.label-small{font:11px var(--font-display);fill:var(--map-ink);opacity:.75}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;padding:0 6px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend svg{width:18px;height:14px;flex:none}
+.modebar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:#3a2f17;border:1px solid var(--amber);border-radius:4px}
+.modebar p{margin:0;flex:1;min-width:200px}
+
+.btn{background:var(--panel-2);border:1px solid rgba(226,220,200,.22);border-radius:4px;padding:7px 12px;font-weight:600;line-height:1.2;text-align:left;min-height:36px}
+.btn:hover:not(:disabled){border-color:var(--amber)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--amber);color:#1b1608;border-color:var(--amber)}
+.btn.on{border-color:var(--good);color:var(--good)}
+.btn.icon{min-width:36px;text-align:center;padding:7px 10px}
+.btn small{display:block;font:500 11px var(--font-num);opacity:.8;margin-top:2px}
+
+.side{background:var(--panel);border:1px solid var(--line);border-radius:6px;display:flex;flex-direction:column;min-width:0}
+.sec{padding:12px 14px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.sec:last-child{border-bottom:0}
+.sec.report{background:rgba(226,162,58,.06)}
+.label{font:600 11px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin:0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.place h2{margin:0;font:26px/1.1 var(--font-display);text-wrap:balance}
+.place .kind{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.state{font:600 11px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:2px;color:#15130c;white-space:nowrap}
+.state.secure{background:#d9d2b8}.state.threat{background:#e9c76b}.state.holding{background:#eaa05e}.state.losing{background:#d0532c;color:#fff}.state.fallen{background:#000;color:#ddd;border:1px solid #555}.state.cleared{background:#9a9686}.state.evac{background:var(--good)}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:6px}
+.facts div{background:rgba(0,0,0,.22);border-radius:4px;padding:6px 8px;min-width:0}
+.facts b{display:block;font:600 17px var(--font-num)}
+.facts span{font-size:11.5px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase}
+.orders{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.note{font-size:13px;color:var(--muted);margin:0}
+.callout{font-size:13.5px;margin:0;padding:7px 9px;border-radius:4px;background:rgba(0,0,0,.22);border-left:3px solid var(--amber)}
+.callout.bad{border-left-color:var(--blood);color:#efb2a6}
+.callout.good{border-left-color:var(--good);color:#c4dcb2}
+.amts{display:flex;gap:6px;flex-wrap:wrap}
+.sitlist{display:flex;flex-direction:column;gap:4px}
+.sitlist button{display:flex;justify-content:space-between;gap:8px;background:rgba(0,0,0,.2);border:1px solid var(--line);border-radius:4px;padding:7px 9px;text-align:left;flex-wrap:wrap;min-height:36px}
+.sitlist button:hover{border-color:var(--amber)}
+.sitlist em{font-style:normal;font:600 12px var(--font-num);color:var(--muted)}
+.sitlist em.bad{color:#ec9a8b}
+.replist{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px;font-size:14px}
+.replist li.bad{color:#eaa092}.replist li.good{color:#b8d4a3}.replist li.key{color:var(--amber)}
+.log{list-style:none;margin:0;padding:0;max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:7px}
+.log li{font:13.5px/1.45 var(--font-display);color:#d3cdbb}
+.log li time{font:600 11px var(--font-num);color:var(--muted);margin-right:6px}
+.log li.bad{color:#eaa092}.log li.good{color:#b8d4a3}.log li.key{color:var(--amber)}
+.check{display:flex;gap:8px;align-items:center;font-size:13.5px;color:var(--muted)}
+.check input{width:18px;height:18px;accent-color:var(--amber)}
+
+.overlay[hidden]{display:none}
+.overlay{position:fixed;inset:0;background:rgba(6,8,10,.78);display:flex;align-items:center;justify-content:center;padding:16px;padding-top:calc(16px + env(safe-area-inset-top,0px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:50;overflow-y:auto}
+.card{background:var(--panel);border:1px solid rgba(226,220,200,.25);border-radius:6px;width:min(680px,100%);padding:20px;display:flex;flex-direction:column;gap:12px;max-height:100%;overflow-y:auto}
+.card .eyebrow{font:600 12px var(--font-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--amber)}
+.card.red{border-color:var(--blood)}.card.red .eyebrow{color:#f0a093}
+.card h2{margin:0;font:28px/1.1 var(--font-display);text-wrap:balance}
+.card h3{margin:4px 0 0;font:600 12px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.card p.body{font:16px/1.6 var(--font-display);margin:0;color:#e9e3cf}
+.card ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:5px}
+.card ul li{font-size:14.5px}
+.card ul li.bad{color:#eaa092}.card ul li.good{color:#b8d4a3}.card ul li.key{color:var(--amber)}
+.choices{display:flex;flex-direction:column;gap:6px}
+.choices .btn{padding:10px 12px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg .btn{flex:1 1 150px}
+.seg .btn[aria-pressed="true"]{border-color:var(--amber);background:#3a2f17}
+.field{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.field input{background:var(--panel-2);border:1px solid rgba(226,220,200,.25);border-radius:4px;padding:8px 10px;width:12em;font-family:var(--font-num)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px}
+.stats div{background:rgba(0,0,0,.25);border-radius:4px;padding:8px 10px}
+.stats b{display:block;font:600 22px var(--font-num)}
+.stats span{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.medals{display:flex;flex-wrap:wrap;gap:6px}
+.medal{font-size:13px;padding:4px 9px;border-radius:3px;border:1px solid var(--line);color:var(--muted)}
+.medal.won{border-color:var(--amber);color:var(--amber);background:#3a2f17}
+.helpgrid{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;font-size:14px;margin:0}
+.helpgrid dt{font:600 13px var(--font-num);color:var(--amber)}
+.helpgrid dd{margin:0}
+
+/* phone: sticky command bar and a bottom sheet for orders */
+.cmdbar,.sheet{display:none}
+@media (max-width:700px){
+  body{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+  .top .endturn,.top .hide-sm{display:none}
+  .mapscroll{max-height:62vh}
+  .cmdbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;gap:8px;align-items:center;background:var(--panel);border-top:1px solid rgba(226,220,200,.25);padding:8px 12px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+  .cmdbar .msg{flex:1;min-width:0;font-size:13px;line-height:1.3}
+  .cmdbar .endturn{padding:10px 14px}
+  .sheet{display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:calc(60px + env(safe-area-inset-bottom,0px));max-height:58vh;overflow-y:auto;z-index:39;background:var(--panel);border-top:2px solid var(--amber);border-radius:10px 10px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.5)}
+  .sheet[hidden]{display:none}
+  .side .placewrap{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+<style>[hidden]{display:none!important}body{margin:0}:root{padding-top:env(safe-area-inset-top,0px)}</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top" id="top"></header>
+  <div class="ticker" id="ticker" aria-live="polite"></div>
+  <div class="main">
+    <section class="mapbox">
+      <div id="modebar"></div>
+      <div class="mapwrap"><div class="mapscroll" id="mapscroll">
+        <svg class="map" id="map" viewBox="0 0 1000 700" role="img" aria-label="Operations map of Vessmark">
+          <defs>
+            <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
+            <marker id="carr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
+          </defs>
+          <g id="terrain"></g><g id="edges"></g><g id="routes"></g><g id="flows"></g><g id="cols"></g><g id="nodes"></g>
+        </svg>
+      </div>
+      <div class="zoom"><button data-act="zoomin" aria-label="Zoom in">+</button><button data-act="zoomout" aria-label="Zoom out">−</button></div></div>
+      <div class="legend" aria-label="Map key">
+        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#f0ead6" stroke="#555"/></svg>Secure</span>
+        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#e9c76b" stroke="#555"/></svg>Threatened</span>
+        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#eaa05e" stroke="#555"/></svg>Infected, holding</span>
+        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#d0532c" stroke="#555"/></svg>Infected, losing</span>
+        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#24231f" stroke="#555"/></svg>Fallen</span>
+        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#9a9686" stroke="#555"/></svg>Empty</span>
+        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="6" fill="rgba(196,67,47,.25)" stroke="#c4432f" stroke-width="1.5"/></svg>Horde (size)</span>
+        <span><svg viewBox="0 0 18 14"><line x1="1" y1="7" x2="13" y2="7" stroke="#a3301f" stroke-width="2.5"/><path d="M12 3 L17 7 L12 11 z" fill="#a3301f"/></svg>Horde moving next turn</span>
+        <span><svg viewBox="0 0 18 14"><rect x="2" y="2" width="14" height="10" rx="1.5" fill="#3d5a78"/></svg>Battalions</span>
+        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="4" fill="#8fb27a" stroke="#2c3a24"/></svg>Evacuating</span>
+        <span><svg viewBox="0 0 18 14"><circle cx="6" cy="7" r="4" fill="#fff" stroke="#2c3a24"/><path d="M11 3 L17 7 L11 11 z" fill="#2c3a24"/></svg>Refugee column</span>
+        <span><svg viewBox="0 0 18 14"><rect x="4" y="2" width="10" height="10" transform="rotate(45 9 7)" fill="none" stroke="#bbb" stroke-width="1.5"/></svg>Port</span>
+        <span><svg viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="#aaa" stroke-width="3.5"/><line x1="1" y1="7" x2="17" y2="7" stroke="#1c2326" stroke-width="1.5" stroke-dasharray="2 3"/></svg>Railway</span>
+        <span><svg viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="#9c8660" stroke-width="2.5"/></svg>Road</span>
+      </div>
+    </section>
+    <aside class="side" id="side"></aside>
+  </div>
+</div>
+<div class="sheet" id="sheet" hidden></div>
+<div class="cmdbar" id="cmdbar"></div>
+<div id="overlay" class="overlay" hidden></div>
+
+<script>
+/* ---------- Vessmark ---------- */
+// ls: label side (r/l/t/b), dx/dy: label nudge
+const P={
+  westhaven:{name:'Westhaven',type:'port',x:108,y:300,pop:60,T:1,prod:3,cap:16,ls:'t'},
+  aldermoor:{name:'Aldermoor',type:'capital',x:250,y:335,pop:420,T:6,prod:6,ls:'r',dy:6},
+  millbrook:{name:'Millbrook',type:'town',x:190,y:190,pop:25,ls:'l'},
+  brindle:{name:'Brindle',type:'town',x:175,y:465,pop:18,ls:'l'},
+  hollis:{name:'Hollis Farms',type:'farm',x:320,y:172,pop:8,prod:4,ls:'t'},
+  cedar:{name:'Cedar Gap',type:'junction',x:372,y:298,pop:15,ls:'r',dy:8},
+  ashford:{name:'Ashford',type:'town',x:385,y:445,pop:40,ls:'l'},
+  brannock:{name:'Fort Brannock',type:'base',x:285,y:560,pop:10,T:4,ls:'l'},
+  southport:{name:'Southport',type:'port',x:410,y:640,pop:90,T:2,prod:3,cap:12,ls:'b'},
+  northgate:{name:'Northgate',type:'town',x:450,y:98,pop:35,ls:'t'},
+  larch:{name:'Larch Depot',type:'depot',x:480,y:222,pop:6,T:1,prod:4,ls:'b'},
+  brennan:{name:"St Brennan's",type:'hospital',x:560,y:335,pop:30,ls:'t'},
+  harlow:{name:'Harlow Junction',type:'junction',x:565,y:475,pop:22,prod:2,ls:'r',dy:-10},
+  greyfield:{name:'Greyfield',type:'town',x:612,y:148,pop:12,ls:'t'},
+  torrin:{name:'Camp Torrin',type:'base',x:705,y:235,pop:12,T:5,ls:'t'},
+  kessler:{name:'Kessler',type:'city',x:712,y:385,pop:600,T:3,ls:'r'},
+  marrow:{name:'Marrow',type:'town',x:640,y:605,pop:30,ls:'b'},
+  dunmore:{name:'Dunmore',type:'town',x:775,y:540,pop:20,ls:'b'},
+  greystone:{name:'Greystone',type:'town',x:825,y:140,pop:9,ls:'t'},
+  saltmarsh:{name:'Saltmarsh',type:'town',x:868,y:470,pop:10,ls:'l'},
+  calder:{name:'Port Calder',type:'port',x:915,y:300,pop:120,T:2,prod:3,cap:14,ls:'b',dx:-18},
+};
+const E=[['westhaven','aldermoor',1],['westhaven','millbrook'],['westhaven','brindle'],['millbrook','aldermoor'],['millbrook','hollis'],['aldermoor','cedar',1],['aldermoor','brindle'],['aldermoor','ashford'],['aldermoor','brannock',1],['hollis','cedar'],['hollis','northgate'],['hollis','larch'],['cedar','larch',1],['cedar','ashford'],['brindle','brannock'],['ashford','brannock'],['ashford','harlow',1],['ashford','brennan'],['brannock','southport',1],['southport','marrow'],['marrow','harlow'],['marrow','dunmore'],['northgate','greyfield'],['northgate','larch'],['larch','brennan',1],['larch','greyfield'],['greyfield','torrin'],['greyfield','greystone'],['brennan','kessler',1],['brennan','torrin'],['brennan','harlow'],['harlow','kessler',1],['harlow','dunmore'],['torrin','kessler'],['torrin','greystone'],['torrin','calder',1],['kessler','calder',1],['kessler','dunmore'],['greystone','calder'],['dunmore','saltmarsh'],['saltmarsh','calder']];
+const TYPE_LABEL={port:'Evacuation port',capital:'Capital · HQ',town:'Town',farm:'Farmland',junction:'Rail junction',base:'Army base',depot:'Supply depot',hospital:'Hospital town',city:'City'};
+const PORTS=['westhaven','southport','calder'];
+const TURNS=24, SAVE_KEY='lastboat_command_v3', PREF_KEY='lastboat_prefs';
+const TOTAL_POP=Object.values(P).reduce((a,n)=>a+n.pop,0);
+const DIFFS={
+  reservist:{name:'Reservist',cp:6,rate:0,spark:.7,ships:1.2,desc:'6 orders a turn, slower spread, bigger ships.'},
+  regular:{name:'Regular',cp:5,rate:0,spark:1,ships:1,desc:'The campaign as designed.'},
+  veteran:{name:'Veteran',cp:4,rate:1,spark:1.2,ships:.85,desc:'4 orders a turn, faster spread, smaller ships.'},
+};
+const SPARK_P=[0,.3,.45,.6,.75,.85,.9];
+const ORIGINS=['kessler','northgate','ashford','marrow','brennan','torrin','harlow'];
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ek=(a,b)=>[a,b].sort().join('|');
+const k=v=>v<.05?0:v<10?Math.round(v*10)/10:Math.round(v);
+const kp=v=>v<.05?'none':`${k(v)}k`;
+const bn=v=>v<.05?'0':v<1?String(Math.round(v*10)/10):String(Math.round(v));
+function mulberry(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
+let rng=Math.random;
+const when=t=>`Day ${Math.floor(t/2)+1} · ${t%2?'Night':'Morning'}`;
+const isRail=(a,b)=>E.some(e=>e[2]&&((e[0]===a&&e[1]===b)||(e[0]===b&&e[1]===a)));
+const open=(a,b)=>!S.cut.includes(ek(a,b));
+const nbrs=a=>E.filter(e=>e[0]===a||e[1]===a).map(e=>e[0]===a?e[1]:e[0]).filter(b=>open(a,b));
+const name=id=>P[id].name;
+function pickW(items,w){let r=rng()*w.reduce((a,x)=>a+x,0);for(let i=0;i<items.length;i++){if((r-=w[i])<0)return items[i];}return items[items.length-1];}
+let PREFS={reportModal:false,zoom:1};
+try{Object.assign(PREFS,JSON.parse(localStorage.getItem(PREF_KEY)||'{}'));}catch(e){}
+function savePrefs(){try{localStorage.setItem(PREF_KEY,JSON.stringify(PREFS));}catch(e){}}
+
+/* ---------- state ---------- */
+let S, UI={sel:null,mode:null,undo:[],setup:null,help:false,showReport:false};
+function newGame(opts={}){
+  const scenario=opts.scenario||'kessler',diff=opts.diff||'regular';
+  const seed=Number.isFinite(opts.seed)?opts.seed:Math.floor(Math.random()*1e9);
+  rng=mulberry(seed);const D=DIFFS[diff];
+  const nodes={};
+  for(const [id,p] of Object.entries(P))nodes[id]={pop:p.pop,H:0,T:p.T||0,F:0,stock:0,evac:false,evacT:-1,queue:0,sup:1,oos:0,wasFallen:false};
+  let origin='kessler',cut=[],caps={},shift={};
+  if(scenario==='random'){
+    origin=ORIGINS[Math.floor(rng()*ORIGINS.length)];
+    for(const id of PORTS)caps[id]=Math.round(P[id].cap*(.75+rng()*.5));
+    const cand=E.filter(e=>!e.includes('aldermoor')&&!PORTS.some(p=>e.includes(p))&&!e.includes(origin));
+    for(let i=0;i<2;i++){const e=cand.splice(Math.floor(rng()*cand.length),1)[0];cut.push(ek(e[0],e[1]));}
+    for(const id of ['okafor','fuel','recall','navy','promise_hold','promise_evac','torrin'])shift[id]=Math.floor(rng()*3)-1;
+  } else for(const id of PORTS)caps[id]=P[id].cap;
+  for(const id of PORTS)caps[id]=Math.round(caps[id]*D.ships);
+  const o=nodes[origin];o.H=origin==='kessler'?95+Math.round(rng()*20):Math.round(P[origin].pop*.9+15+rng()*10);
+  if(origin==='kessler'){nodes.brennan.H=3;const spark=['harlow','torrin','dunmore'][Math.floor(rng()*3)];nodes[spark].H=2;}
+  else{const ns=E.filter(e=>e.includes(origin)).map(e=>e[0]===origin?e[1]:e[0]);nodes[ns[Math.floor(rng()*ns.length)]].H=3;}
+  S={seed,scenario,diff,origin,turn:0,cp:D.cp,cpMax:D.cp,supply:50,evacuated:0,lost:0,mobilized:0,tLost:0,cutT:-1,cutN:0,sorties:5,
+     cut,cols:[],nodes,caps,shift,log:[],report:[],events:['briefing'],fired:{briefing:1},flags:{},bonusCap:{},over:null,
+     order:70,conf:70,infRate:1+D.rate,intent:{},nextSpark:null,march:null,promises:[],moments:[],last:null,strikeKilled:0,initT:0,stamp:null};
+  for(const id in P)S.initT+=nodes[id].T;
+  for(const c of cut){const [a,b]=c.split('|');log(`Storm damage: the road between ${name(a)} and ${name(b)} is impassable.`);}
+  log(`You take command at Aldermoor. ${name(origin)} reports a mass-casualty outbreak.`,'key');
+  plan();
+  UI.undo=[];
+}
+function log(text,kind=''){const t=S.stamp??S.turn;S.log.unshift({t,text,kind});if(S.log.length>150)S.log.length=150;S.report.push({text,kind});}
+function moment(text,sev){S.moments.push({t:S.stamp??S.turn,text,sev});}
+function save(){try{localStorage.setItem(SAVE_KEY,JSON.stringify(S));}catch(e){}}
+function load(){try{const r=localStorage.getItem(SAVE_KEY);if(r){const s=JSON.parse(r);if(s&&s.nodes&&s.cols&&s.caps)return s;}}catch(e){}return null;}
+function morale(dOrder,dConf){S.order=clamp(S.order+dOrder,0,100);S.conf=clamp(S.conf+dConf,0,100);}
+
+/* ---------- reading the situation ---------- */
+const N=id=>S.nodes[id];
+const defence=id=>{const n=N(id);return n.T*2.2*(n.sup??1)*(1+.5*n.F);};
+const fallen=id=>{const n=N(id),alive=n.pop+n.queue;return n.H>=.5&&n.T<.3&&(alive<1||n.H>=alive*3);};
+const held=id=>{const n=N(id);return n.H<.5||defence(id)>=n.H;};
+function state(id){
+  const n=N(id);
+  if(fallen(id))return 'fallen';
+  if(n.H>=.5)return held(id)?'holding':'losing';
+  if(n.pop+n.queue<1&&n.T<.3)return 'cleared';
+  if(nbrs(id).some(b=>N(b).H>=.5)||incoming(id)>0)return 'threat';
+  return 'secure';
+}
+const STATE_LABEL={secure:'Secure',threat:'Threatened',holding:'Infected · holding',losing:'Infected · losing',fallen:'Fallen',cleared:'Empty'};
+const infectedState=st=>st==='holding'||st==='losing';
+const portOpen=id=>P[id].type==='port'&&!fallen(id);
+const capOf=id=>(S.caps[id]||0)+(S.bonusCap[id]||0);
+function supplyNet(){
+  const seen=new Set();if(fallen('aldermoor'))return seen;
+  const q=['aldermoor'];seen.add('aldermoor');
+  while(q.length){const a=q.shift();for(const b of nbrs(a)){if(seen.has(b)||fallen(b))continue;seen.add(b);q.push(b);}}
+  return seen;
+}
+function railReach(from){
+  const seen=new Set([from]),q=[from];
+  while(q.length){const a=q.shift();for(const b of nbrs(a)){if(seen.has(b)||!isRail(a,b)||N(b).H>=.5)continue;seen.add(b);q.push(b);}}
+  seen.delete(from);return seen;
+}
+function moveTargets(from){const t=new Set(nbrs(from));for(const r of railReach(from))t.add(r);return t;}
+const moveCost=(a,b)=>nbrs(a).includes(b)?1:(S.flags.ration?2:1);
+function routeToPort(from){
+  const dist={[from]:0},prev={},todo=new Set(Object.keys(P));
+  while(todo.size){
+    let u=null;for(const v of todo)if(dist[v]!==undefined&&(u===null||dist[v]<dist[u]))u=v;
+    if(u===null)break;todo.delete(u);
+    if(portOpen(u)){const path=[u];while(prev[path[0]])path.unshift(prev[path[0]]);return path;}
+    for(const b of nbrs(u)){if(fallen(b))continue;const c=dist[u]+1+(N(b).H>=.5?3+N(b).H/8:0);if(dist[b]===undefined||c<dist[b]){dist[b]=c;prev[b]=u;}}
+  }
+  return null;
+}
+function routeTurns(path){let t=0,i=1;while(i<path.length){const rail=isRail(path[i-1],path[i]);t++;if(rail&&i+1<path.length&&isRail(path[i],path[i+1]))i+=2;else i++;}return t;}
+
+/* ---------- forecast: what the hordes intend to do next turn ---------- */
+function plan(){
+  S.intent={};
+  for(const id in P){if(N(id).H>=1)S.intent[id]=.8+rng()*.4;}
+  const lvl=Math.min(S.infRate,SPARK_P.length-1);
+  S.nextSpark=null;
+  if(S.turn>=1&&rng()<SPARK_P[lvl]){
+    const cand=Object.keys(P).filter(id=>N(id).H<.5&&N(id).pop>=3);
+    if(cand.length){S.nextSpark={id:pickW(cand,cand.map(id=>Math.sqrt(N(id).pop))),size:(1.5+lvl*.8+rng()*2)*DIFFS[S.diff].spark};log(`Infected travellers sighted near ${name(S.nextSpark.id)}. Expect cases there next turn.`,'bad');}
+  }
+}
+function spillOut(id,Hafter){const n=N(id);return Hafter*(n.pop+n.queue<1?.32:.13)*(S.intent[id]??1);}
+function flows(){
+  const out=[];
+  for(const id in P){const n=N(id);if(n.H<1)continue;
+    const est=Math.max(0,n.H-defence(id));if(est<1.5)continue;
+    const ns=nbrs(id);if(!ns.length)continue;const amt=spillOut(id,est);
+    const w=ns.map(b=>N(b).pop+4),tw=w.reduce((a,x)=>a+x,0);
+    ns.forEach((b,i)=>{const a=amt*w[i]/tw;if(a>=.8)out.push({from:id,to:b,amt:a});});
+  }
+  return out;
+}
+function incoming(id){let s=0;for(const f of (UI._flows||[]))if(f.to===id)s+=f.amt;return s;}
+
+/* ---------- orders ---------- */
+function snapshot(){UI.undo.push(JSON.stringify(S));if(UI.undo.length>30)UI.undo.shift();}
+function spend(c){if(S.cp<c)return false;snapshot();S.cp-=c;return true;}
+function orderMove(from,to,amt){
+  const c=moveCost(from,to);if(!moveTargets(from).has(to)||amt<=0||N(from).T<amt-1e-9||!spend(c))return;
+  N(from).T-=amt;N(to).T+=amt;if(N(from).T<.05)N(from).T=0;
+  log(`${bn(amt)} battalion${amt===1?'':'s'} ${nbrs(from).includes(to)?'march':'go by rail'} from ${name(from)} to ${name(to)}.`);
+}
+function orderAirdrop(id){if(S.supply<10||!spend(1))return;S.supply-=10;N(id).stock+=10;log(`Air drop: 10 supply to ${name(id)}.`);}
+function orderFortify(id){const n=N(id);if(n.F>=3||S.supply<8||n.H>=.5||!spend(1))return;S.supply-=8;n.F++;log(`Engineers fortify ${name(id)} (level ${n.F}).`);}
+function orderEvac(id){
+  const n=N(id);
+  if(n.evac){snapshot();n.evac=false;if(n.evacT===S.turn){S.cp++;n.evacT=-1;}log(`Evacuation of ${name(id)} halted.`);return;}
+  if(fallen(id)||n.pop<1||!spend(1))return;n.evac=true;n.evacT=S.turn;log(`Evacuation ordered for ${name(id)}.`,'key');
+}
+function orderMilitia(id){const n=N(id);if(n.pop<15||fallen(id)||!spend(1))return;n.pop-=10;n.T+=1;S.mobilized+=10;morale(-2,0);log(`${name(id)} raises a militia battalion from 10k volunteers.`);}
+function orderStrike(id){const n=N(id);if(S.sorties<1||n.H<.5||!spend(2))return;S.sorties--;
+  const kh=Math.min(n.H*.6,20),kc=n.pop*.15;n.H-=kh;n.pop-=kc;S.lost+=kc;S.strikeKilled+=kc;
+  if(kc>=1){morale(-5,-2);moment(`Our own air strike killed ${kp(kc)} civilians in ${name(id)}.`,kc);}
+  log(`Air strike on ${name(id)}: about ${kp(kh)} infected destroyed.${kc>=.5?` ${kp(kc)} civilians died with them.`:''}`,'bad');}
+const cutsLeft=()=>S.cutT===S.turn?2-S.cutN:2;
+function orderCut(a,b){
+  if(!open(a,b)||cutsLeft()<1||!spend(1))return;
+  if(S.cutT!==S.turn){S.cutT=S.turn;S.cutN=0;}S.cutN++;S.cut.push(ek(a,b));
+  const trapped=S.cols.some(c=>c.at===a||c.at===b);if(trapped)morale(-4,0);
+  log(`Engineers blow the ${isRail(a,b)?'rail bridge':'road'} between ${name(a)} and ${name(b)}.${trapped?' Refugees are stranded on the far side.':''}`,'key');
+}
+function undo(){const s=UI.undo.pop();if(s){S=JSON.parse(s);UI.mode=null;}}
+
+/* ---------- the turn ---------- */
+function endTurn(){
+  if(S.over||S.events.length)return;
+  S.report=[];const before={};for(const id in P)before[id]=state(id);
+  const t=S.turn;S.stamp=t+1;rng=mulberry(S.seed+t*7919);
+  const L={lostBy:{},sailed:{},prod:0,upkeep:0,arrivals:[],lost0:S.lost,evac0:S.evacuated,order0:S.order,conf0:S.conf};
+  const lose=(id,v)=>{if(v<=0)return;S.lost+=v;L.lostBy[id]=(L.lostBy[id]||0)+v;};
+  // 1. production
+  for(const id in P)if(P[id].prod&&!fallen(id)&&N(id).pop>=1)L.prod+=P[id].prod;
+  S.supply+=L.prod;
+  // 2. supply
+  const net=supplyNet();let demand=0;for(const id of net)demand+=N(id).T;
+  const ratio=demand<=0?1:clamp(S.supply/demand,0,1);
+  L.upkeep=Math.min(S.supply,demand);S.supply=Math.max(0,S.supply-demand);
+  for(const id in P){const n=N(id);
+    if(n.T<.05){n.sup=1;n.oos=0;continue;}
+    if(net.has(id)){n.sup=.25+.75*ratio;n.oos=0;}
+    else if(n.stock>=n.T){n.stock-=n.T;n.sup=1;n.oos=0;}
+    else{n.stock=0;n.oos++;n.sup=Math.max(.25,1-.25*n.oos);const a=n.T*.04*n.oos;n.T-=a;S.tLost+=a;if(n.oos===1)log(`${name(id)} is cut off from supply.`,'bad');}
+  }
+  if(ratio<.999)log(`Supply shortfall: units are on ${Math.round(ratio*100)}% rations.`,'bad');
+  // 3. fighting and infection
+  const convRate=S.flags.cure?.5:.9;
+  for(const id in P){const n=N(id);if(n.H<.05){n.H=0;continue;}
+    const fort=1+.5*n.F;
+    const kill=Math.min(n.H,defence(id));const H0=n.H;n.H-=kill;
+    const tl=Math.min(n.T,H0*.045/fort);n.T-=tl;S.tLost+=tl;
+    const popF=n.pop/(n.pop+40);
+    const conv=Math.min(n.pop,n.pop*.16+.5,n.H*convRate*popF/(1+n.T*.1)+(n.H>0?.3:0));
+    n.pop-=conv;n.H+=conv;lose(id,conv);
+    if(n.pop<.5){lose(id,n.pop);n.pop=0;}
+    if(n.queue>0&&n.H>=.5){const q=Math.min(n.queue,n.H*.12/(1+n.T*.1));n.queue-=q;n.H+=q;lose(id,q);}
+  }
+  // 4. hordes spill along open roads toward people, as forecast
+  const inflow={};
+  for(const id in P){const n=N(id);
+    if(n.pop+n.queue<1&&n.H>0){n.H*=.94;if(n.H<.3)n.H=0;}
+    if(n.H<1.5)continue;const ns=nbrs(id);if(!ns.length)continue;
+    const out=spillOut(id,n.H);const w=ns.map(b=>N(b).pop+4),tw=w.reduce((a,x)=>a+x,0);
+    ns.forEach((b,i)=>{const a=out*w[i]/tw;inflow[b]=(inflow[b]||0)+a;if(a>=2&&N(b).H<.5)L.arrivals.push(`A horde from ${name(id)} reached ${name(b)} (about ${kp(a)}).`);});n.H-=out;
+  }
+  for(const b in inflow)N(b).H+=inflow[b];
+  // 4b. the outbreak warned about last turn
+  if(S.nextSpark&&N(S.nextSpark.id).pop>=1){N(S.nextSpark.id).H+=S.nextSpark.size;log(`New cases at ${name(S.nextSpark.id)}: infected travellers got through.`,'bad');}
+  // 4c. the march
+  if(S.march&&S.march.at===t){
+    const src=S.march.from,n=N(src),ns=nbrs(src);
+    if(!ns.length||n.H<5){log(`The ${name(src)} horde surges and breaks against the blown bridges.`,'good');morale(0,5);}
+    else{const amt=n.H*.45;n.H-=amt;const w=ns.map(b=>N(b).pop+N(b).queue+4),tw=w.reduce((a,x)=>a+x,0);
+      ns.forEach((b,i)=>{N(b).H+=amt*w[i]/tw;});log(`The ${name(src)} horde is on the march: about ${kp(amt)} infected pour toward ${ns.map(name).join(', ')}.`,'bad');moment(`The ${name(src)} horde marched: ${kp(amt)} infected on the roads.`,amt);}
+    S.march=null;
+  }
+  // 5. refugee columns move toward the nearest open port
+  const keep=[];
+  for(const c of S.cols){
+    const path=routeToPort(c.at);
+    if(!path){N(c.at).pop+=c.count;continue;}
+    if(path.length===1){N(c.at).queue+=c.count;continue;}
+    let i=1,steps=1,hurt=0;
+    while(i<path.length){
+      const nx=path[i];c.at=nx;
+      if(c.seed){const l=c.count*.03;c.count-=l;N(nx).H+=l;lose(nx,l);c.seed=false;}
+      const n=N(nx);
+      if(n.H>=.5){const f=n.H/(n.H+25+n.T*8)*.8,l=c.count*f;c.count-=l;n.H+=l*.8;lose(nx,l);hurt+=l;}
+      if(portOpen(nx)){n.queue+=c.count;c.count=0;break;}
+      if(!(isRail(path[i-1],nx)&&steps<2&&n.H<.5&&i+1<path.length&&isRail(nx,path[i+1])))break;steps++;i++;
+    }
+    if(hurt>=2){log(`A refugee column was caught at ${name(c.at)}. ${kp(hurt)} lost.`,'bad');moment(`A refugee column was caught at ${name(c.at)}: ${kp(hurt)} lost.`,hurt);}
+    if(c.count>=.2)keep.push(c);else lose(c.at,c.count);
+  }
+  S.cols=keep;
+  // 6. new columns leave evacuating places
+  const orderMul=S.order<15?.25:S.order<35?.5:1;
+  if(orderMul<1)log(S.order<15?'Riots and looting: evacuations have almost stopped.':'Public order is breaking down: evacuations are moving half as many people.','bad');
+  for(const id in P){const n=N(id);if(!n.evac||n.pop<.5||fallen(id))continue;
+    if(P[id].type==='port'){const m=Math.min(n.pop,capOf(id)*1.2);n.pop-=m;n.queue+=m;}
+    else{let m=Math.min(n.pop,Math.max(4,n.pop*.25),40)*orderMul;if(S.flags.panic>t)m*=.5;n.pop-=m;S.cols.push({at:id,count:m,seed:n.H>=.5});}
+    if(n.pop<.5){lose(id,n.pop);n.pop=0;n.evac=false;log(`${name(id)} has been fully evacuated.`,'good');morale(2,1);}
+  }
+  // 7. ships sail
+  for(const id of PORTS){const n=N(id);
+    if(fallen(id)){if(n.queue>.5){lose(id,n.queue);log(`${kp(n.queue)} people waiting on the quays at ${name(id)} are lost.`,'bad');moment(`${kp(n.queue)} people were lost on the quays at ${name(id)}.`,n.queue);}n.queue=0;continue;}
+    const cap=capOf(id)*(held(id)?1:.5);const m=Math.min(n.queue,cap);n.queue-=m;S.evacuated+=m;if(m>=.05)L.sailed[id]=m;
+  }
+  const sailed=Object.values(L.sailed).reduce((a,x)=>a+x,0);morale(0,Math.min(3,sailed/25));
+  // 8. reinforcements, recalls
+  if(t>=2){
+    if(!fallen('aldermoor'))N('aldermoor').T+=1;
+    if(!fallen('brannock'))N('brannock').T+=.75;
+    if(!fallen('torrin')&&t%2===0)N('torrin').T+=.5;
+  }
+  if(S.flags.recallAt===t){const src=['brannock','aldermoor'].find(id=>N(id).T>=2)||'aldermoor';const r=Math.min(2,N(src).T);N(src).T-=r;log(`${bn(r)} battalions leave ${name(src)} for the coalition.`,'key');}
+  // 9. what changed: falls, chain reactions, clearances, promises
+  for(const id in P){const now=state(id),n=N(id);
+    if(now==='fallen'&&!n.wasFallen){
+      n.wasFallen=true;log(`${name(id)} has fallen.`,'bad');moment(`${name(id)} fell.`,P[id].pop);
+      morale(-1,-(2+P[id].pop/100));
+      for(const b of nbrs(id)){if(fallen(b))continue;N(b).H+=Math.min(5,P[id].pop*.03+1);}
+      if(nbrs(id).length)log(`Panic spreads from ${name(id)} to ${nbrs(id).filter(b=>!fallen(b)).map(name).join(', ')||'nowhere'}.`,'bad');
+    }
+    else if(!infectedState(before[id])&&before[id]!=='fallen'&&infectedState(now))log(`Outbreak at ${name(id)}.`,'bad');
+    else if((infectedState(before[id])||before[id]==='fallen')&&!infectedState(now)&&now!=='fallen'){log(`${name(id)} is clear of infection.`,'good');n.wasFallen=false;morale(1,3);}
+  }
+  for(const p of S.promises){if(p.done)continue;
+    const fail=fallen(p.id)||(p.kind==='evac'&&t+1>=p.until&&N(p.id).pop>=1);
+    const ok=!fail&&((p.kind==='hold'&&t+1>=p.until)||(p.kind==='evac'&&N(p.id).pop<1));
+    if(fail){p.done='broken';morale(-4,-12);log(`Promise broken: ${p.text}`,'bad');moment(`You broke your promise: ${p.text}`,60);}
+    else if(ok){p.done='kept';morale(4,10);log(`Promise kept: ${p.text}`,'good');}
+  }
+  if(S.order<65)morale(1,0);
+  // 10. next turn
+  S.turn++;S.stamp=null;
+  const lowConf=S.conf<30,highConf=S.conf>=80;S.cp=S.cpMax-(lowConf?1:0)+(highConf?1:0);
+  if(lowConf)log('The cabinet is second-guessing your orders. You have one order fewer this turn.','bad');
+  if(highConf)log('The cabinet trusts you completely. You have an extra order this turn.','good');
+  if([6,12,18].includes(S.turn)){S.infRate++;log(`The infection is spreading faster: infection rate ${Math.min(S.infRate,6)}/6.`,'bad');}
+  L.dLost=S.lost-L.lost0;L.dEvac=S.evacuated-L.evac0;L.dOrder=S.order-L.order0;L.dConf=S.conf-L.conf0;
+  S.last=L;
+  if(fallen('aldermoor')){finish('capital');return;}
+  if(S.conf<=0){finish('confidence');return;}
+  if(PORTS.every(fallen)){finish('ports');return;}
+  if(S.turn>=TURNS){finish('time');return;}
+  plan();
+  for(const ev of EVENTS){if(S.fired[ev.id])continue;const at=ev.turn+(S.shift[ev.id]||0);if(S.turn>=at&&(!ev.when||ev.when())){S.fired[ev.id]=1;S.events.push(ev.id);}}
+  if(S.flags.sealedAt&&S.turn===S.flags.sealedAt+3)log('Survivors report that a refugee column was trapped on the approach road when the bridges went up.','bad');
+  UI.undo=[];
+  const major=S.report.some(r=>r.kind==='bad'&&/fallen|lost on the quays|Promise broken|march/.test(r.text));
+  UI.showReport=PREFS.reportModal||major;
+}
+function sheltered(){let s=0;for(const id in P){const n=N(id);if(held(id)&&!fallen(id))s+=n.pop*.5+n.queue*.75;}for(const c of S.cols)if(held(c.at))s+=c.count*.5;return s;}
+function militiaFate(){let tot=0;for(const id in P)tot+=N(id).T;const rate=tot+S.tLost>0?tot/(tot+S.tLost):1;return {saved:S.mobilized*rate*.5,lost:S.mobilized*(1-rate)};}
+function stranded(){let s=0;for(const id in P){if(!held(id)||fallen(id))s+=N(id).pop+N(id).queue;}for(const c of S.cols)if(!held(c.at))s+=c.count;return s;}
+function finish(why){
+  for(const p of S.promises)if(!p.done&&p.kind==='port'){if(!fallen(p.id)){p.done='kept';}else p.done='broken';}
+  const timeUp=why==='time',sh=timeUp?sheltered():0,mil=militiaFate();
+  const saved=S.evacuated+sh+(timeUp?mil.saved:0),pct=saved/TOTAL_POP*100;
+  const grade=why==='capital'?'The government has fallen':why==='confidence'?'Relieved of command':why==='ports'?'No way out':pct>=58?'Saviour of Vessmark':pct>=46?'An orderly withdrawal':pct>=32?'A bitter retreat':'Catastrophe';
+  let tot=0;for(const id in P)tot+=N(id).T;
+  const medals=[
+    {name:'Every port held',won:PORTS.every(id=>!fallen(id))},
+    {name:'No civilians killed by our own strikes',won:S.strikeKilled<.5},
+    {name:'Dr Okafor’s treatment',won:!!S.flags.cure},
+    {name:'Army intact',won:tot>=S.initT},
+    {name:`${name(S.origin)} never sealed`,won:!S.flags.sealed&&nbrs(S.origin).length===E.filter(e=>e.includes(S.origin)).length},
+    {name:'Every promise kept',won:S.promises.length>0&&S.promises.every(p=>p.done==='kept')},
+  ];
+  S.over={why,sheltered:sh,saved,pct,grade,turn:S.turn,milSaved:timeUp?mil.saved:0,milLost:timeUp?mil.lost:S.mobilized,stranded:stranded(),medals};
+  UI.showReport=false;UI.undo=[];
+}
+
+/* ---------- decisions ---------- */
+const O=()=>name(S.origin);
+function promise(kind,id,turns,text){S.promises.push({kind,id,until:S.turn+turns,text,done:null});}
+function promisePlace(filter){return Object.keys(P).filter(id=>!PORTS.includes(id)&&id!=='aldermoor'&&id!==S.origin&&!fallen(id)&&filter(id)).sort((a,b)=>N(b).pop-N(a).pop)[0];}
+const EVENTS=[
+  {id:'briefing',turn:0,eyebrow:'Day 1 · Morning',title:'You have command',
+    body:()=>`General, the Prime Minister has put the defence of Vessmark in your hands. ${O()} has reported thousands of violent cases since midnight. It spreads through bites, and the dead get up. The Navy is sending ships to Westhaven, Southport and Port Calder; the last of them sail at dawn on Day 13. Hold what you can, get people to the ports, and keep Aldermoor standing.`,
+    help:true,choices:()=>[{label:'Understood. Show me the map.',go:()=>{}}]},
+  {id:'origin',turn:2,when:()=>!fallen(S.origin)&&nbrs(S.origin).length>0,eyebrow:'Decision',title:()=>`The ${O()} question`,
+    body:()=>{const two=sealTargets();return `The mayor of ${O()} is begging you to keep the roads open so her people can get out. The Ministry of Health wants the city sealed: blow the links to ${two.map(name).join(' and ')} and let nobody through. There are ${kp(N(S.origin).pop)} people still in ${O()}, and some of them are already infected.`;},
+    choices:()=>[
+      {label:'Seal the city. Blow the bridges.',sub:`Cuts ${sealTargets().map(b=>O()+'–'+name(b)).join(' and ')}. Public order falls; the cabinet approves.`,go:()=>{for(const b of sealTargets())S.cut.push(ek(S.origin,b));S.flags.sealed=1;S.flags.sealedAt=S.turn;morale(-8,4);log(`${O()} is sealed. The bridges go up at dawn with people still on the approach roads.`,'key');}},
+      {label:'Keep the roads open. Get them out.',sub:'Starts evacuating the city. Columns may carry the infection with them.',go:()=>{N(S.origin).evac=true;N(S.origin).evacT=-1;morale(4,-3);log(`${O()}’s roads stay open. Columns of refugees start moving.`,'key');}}]},
+  {id:'okafor',turn:3,when:()=>!fallen('brennan')&&S.origin!=='brennan',eyebrow:'Decision',title:'Dr Okafor’s research',
+    body:()=>'Dr Imani Okafor at St Brennan’s says she is close to a treatment that slows the turn. She needs an armed escort to get her team and samples out to Westhaven. It will take a battalion off the line for good, and the treatment needs three turns to reach the field.',
+    choices:()=>{const src=['brennan','larch','torrin','aldermoor'].find(id=>N(id).T>=1&&!fallen(id));return [
+      {label:src?`Send a battalion from ${name(src)}`:'No battalion can be spared',dis:!src,go:()=>{N(src).T-=1;S.flags.okaforAt=S.turn+3;S.flags.okafor='escorted';log(`A battalion from ${name(src)} escorts Dr Okafor’s team west.`,'key');}},
+      {label:'Refuse. Every rifle is needed.',go:()=>{S.flags.okafor='refused';log('Dr Okafor’s team stays at St Brennan’s.');}}];}},
+  {id:'cure',turn:0,when:()=>S.flags.okaforAt&&S.turn>=S.flags.okaforAt&&!fallen('westhaven'),eyebrow:'Good news',title:'A breakthrough',
+    body:()=>'Dr Okafor’s team has a working treatment for the bitten. Field hospitals can now save nearly half of the people who would have turned.',
+    choices:()=>[{label:'Get it to every unit.',go:()=>{S.flags.cure=1;morale(5,8);log('The infection spreads more slowly everywhere from now on.','good');}}]},
+  {id:'promise_hold',turn:5,when:()=>!!promisePlace(id=>state(id)==='threat'||infectedState(state(id))),eyebrow:'A request',title:()=>`The mayor of ${name(UI._ph=promisePlace(id=>state(id)==='threat'||infectedState(state(id))))}`,
+    body:()=>{const id=UI._ph||promisePlace(id=>state(id)==='threat');return `${name(id)} needs two days to get its schools and hospital out. The mayor asks for your word that the town will be held until ${when(S.turn+4)}. If you promise and keep it, the country will trust you more. If you break it, everyone will hear.`;},
+    choices:()=>{const id=promisePlace(id=>state(id)==='threat'||infectedState(state(id)));return [
+      {label:`Promise to hold ${name(id)} until ${when(S.turn+4)}`,sub:'Kept: confidence +10. Broken: confidence −12.',go:()=>{promise('hold',id,4,`hold ${name(id)} until ${when(S.turn+4)}.`);morale(2,3);log(`You promised to hold ${name(id)}.`,'key');}},
+      {label:'Make no promises',sub:'Confidence −3',go:()=>{morale(-2,-3);log(`You refused to promise anything to ${name(id)}.`);}}];}},
+  {id:'fuel',turn:8,eyebrow:'Decision',title:'Fuel crisis',
+    body:()=>'The fuel depots are nearly dry. The Quartermaster wants to requisition every civilian vehicle and pump in the country. The Interior Minister says that will strand the refugees and start riots.',
+    choices:()=>[
+      {label:'Requisition the fuel',sub:'+40 supply. Evacuations move half as many people for 4 turns, and public order falls.',go:()=>{S.supply+=40;S.flags.panic=S.turn+4;morale(-12,0);log('Fuel requisitioned. There are riots at the pumps.','key');}},
+      {label:'Ration the army instead',sub:'Rail moves cost 2 orders for the rest of the war',go:()=>{S.flags.ration=1;log('The army goes on fuel rations.','key');}}]},
+  {id:'promise_evac',turn:9,when:()=>!!promisePlace(id=>N(id).pop>=15&&!N(id).evac),eyebrow:'A request',title:()=>`Get ${name(UI._pe=promisePlace(id=>N(id).pop>=15&&!N(id).evac))} out`,
+    body:()=>{const id=UI._pe||promisePlace(id=>N(id).pop>=15);return `The bishop of ${name(id)} has ${kp(N(id).pop)} people sheltering in churches and schools. He asks for your word that every one of them will be on the road to a port by ${when(S.turn+6)}.`;},
+    choices:()=>{const id=promisePlace(id=>N(id).pop>=15&&!N(id).evac);return [
+      {label:`Promise to empty ${name(id)} by ${when(S.turn+6)}`,sub:'Starts the evacuation now. Kept: confidence +10. Broken: confidence −12.',go:()=>{promise('evac',id,6,`get everyone out of ${name(id)} by ${when(S.turn+6)}.`);N(id).evac=true;N(id).evacT=-1;morale(2,3);log(`You promised to evacuate ${name(id)}.`,'key');}},
+      {label:'Make no promises',sub:'Confidence −3',go:()=>{morale(-2,-3);}}];}},
+  {id:'recall',turn:10,when:()=>N('brannock').T>=2||N('aldermoor').T>=4,eyebrow:'Decision',title:'The coalition wants its troops back',
+    body:()=>'Coalition command is recalling two battalions to defend its own borders. They leave in two turns. Refuse, and the coalition will hold back the ships it promised for Southport.',
+    choices:()=>[
+      {label:'Let them go',sub:'Lose 2 battalions in 2 turns. Southport ships +6k a turn. Confidence +4.',go:()=>{S.flags.recallAt=S.turn+2;S.bonusCap.southport=(S.bonusCap.southport||0)+6;morale(0,4);log('Two coalition battalions will leave in two turns. Extra ships are promised for Southport.','key');}},
+      {label:'Refuse. We need every rifle.',sub:'Keep the troops. Confidence −10.',go:()=>{morale(0,-10);log('You refused the recall. The coalition is furious.','key');}}]},
+  {id:'navy',turn:12,eyebrow:'Decision',title:'The Navy can send more ships',
+    body:()=>'The Admiralty has found another flotilla. It can reinforce one port for the rest of the evacuation.',
+    choices:()=>PORTS.map(id=>({label:`Send them to ${name(id)}`,sub:fallen(id)?'This port has fallen':`+12k a turn · ${kp(N(id).queue)} waiting there now`,dis:fallen(id),go:()=>{S.bonusCap[id]=(S.bonusCap[id]||0)+12;log(`Extra ships are on their way to ${name(id)}.`,'key');}}))},
+  {id:'promise_port',turn:14,when:()=>PORTS.some(id=>!fallen(id)),eyebrow:'A request',title:'The harbourmasters',
+    body:()=>{const id=busiestPort();return `The harbourmaster at ${name(id)} has ${kp(N(id).queue)} people on the quays. He wants your word that the port will be held until the last ship sails.`;},
+    choices:()=>{const id=busiestPort();return [
+      {label:`Promise to hold ${name(id)} to the end`,sub:'Judged when the last ships sail. Confidence +3 now.',go:()=>{promise('port',id,99,`hold ${name(id)} until the last ship sails.`);morale(3,3);}},
+      {label:'Make no promises',sub:'Confidence −3',go:()=>{morale(-2,-3);}}];}},
+  {id:'torrin',turn:15,when:()=>N('torrin').T>=1&&!fallen('torrin')&&!fallen('calder'),eyebrow:'Decision',title:'Camp Torrin asks to fall back',
+    body:()=>`Colonel Varga at Camp Torrin has ${bn(N('torrin').T)} battalions left and says the base cannot hold much longer. He wants to fall back on Port Calder and hold the harbour for the last ships.`,
+    choices:()=>[
+      {label:'Fall back to Port Calder',sub:'Torrin’s garrison joins Calder, and Calder gains a level of fortification',go:()=>{N('calder').T+=N('torrin').T;N('torrin').T=0;N('calder').F=Math.min(3,N('calder').F+1);S.flags.varga='fellback';log('Camp Torrin is abandoned. Its garrison digs in at Port Calder.','key');}},
+      {label:'Hold Torrin. Every day counts.',sub:'Torrin gains a level of fortification and 2 battalions from its reserve',go:()=>{N('torrin').F=Math.min(3,N('torrin').F+1);N('torrin').T+=2;S.flags.varga='held';log('Camp Torrin will hold. Varga arms his reserve and the engineers throw up another wall.','key');}}]},
+  {id:'march',turn:16,when:()=>{const s=biggestHorde();return s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
+    body:()=>{const s=biggestHorde();return `Reconnaissance flights report that the horde massed at ${name(s)}, about ${kp(N(s).H)} strong, is stirring. Analysts expect it to surge out along every open road on ${when(18)}. Anything it reaches will be hit hard.`;},
+    choices:()=>[{label:'Understood. Prepare the line.',go:()=>{const s=biggestHorde();S.march={from:s,at:17};log(`The ${name(s)} horde will march on ${when(18)}.`,'key');}}]},
+  {id:'last',turn:22,eyebrow:'Day 12',title:'The last ships',
+    body:()=>'The Admiralty signals: the last sailings leave at dawn on Day 13. Whoever is on the quays by then gets out. Everyone else stays behind your lines, or doesn’t.',
+    choices:()=>[{label:'Then let’s fill them.',go:()=>{}}]},
+];
+function sealTargets(){return nbrs(S.origin).sort((a,b)=>(isRail(S.origin,b)-isRail(S.origin,a))||N(b).pop-N(a).pop).slice(0,2);}
+function busiestPort(){return PORTS.filter(id=>!fallen(id)).sort((a,b)=>N(b).queue-N(a).queue)[0];}
+function biggestHorde(){return Object.keys(P).sort((a,b)=>N(b).H-N(a).H)[0];}
+const evTitle=ev=>typeof ev.title==='function'?ev.title():ev.title;
+function decide(i){
+  const ev=EVENTS.find(e=>e.id===S.events[0]);const ch=ev&&ev.choices()[i];if(!ch||ch.dis)return;
+  ch.go();S.events.shift();UI._ph=UI._pe=null;
+}
+
+/* ---------- map ---------- */
+function buildTerrain(){
+  const r=mulberry(1873);
+  const land='M84 120 C150 62 300 44 450 58 S750 48 880 92 C944 140 962 222 936 300 C914 360 952 420 906 500 C872 560 822 602 700 640 C600 672 490 682 400 676 C290 668 210 640 146 582 C92 520 64 440 84 360 C98 300 52 220 84 120 Z';
+  let s=`<path class="land" d="${land}"/><clipPath id="landclip"><path d="${land}"/></clipPath><g clip-path="url(#landclip)">`;
+  for(let x=100;x<1000;x+=100)s+=`<line class="grid" x1="${x}" y1="0" x2="${x}" y2="700"/>`;
+  for(let y=100;y<700;y+=100)s+=`<line class="grid" x1="0" y1="${y}" x2="1000" y2="${y}"/>`;
+  for(const [cx,cy,rx] of [[612,120,80],[820,130,60],[330,90,55],[470,560,50],[180,250,45]])
+    for(let i=1;i<=5;i++)s+=`<ellipse class="contour" cx="${cx+i*2}" cy="${cy}" rx="${rx*i/5}" ry="${rx*i/5*.62}"/>`;
+  for(const [cx,cy,R,n] of [[330,230,60,50],[250,250,40,26],[440,340,46,34],[150,560,50,34],[660,290,40,26],[790,250,45,30],[600,420,30,18],[140,140,45,26],[520,590,45,26],[770,620,35,18],[470,150,40,24]])
+    for(let i=0;i<n;i++){const a=r()*6.283,d=Math.sqrt(r())*R;s+=`<circle class="tree" cx="${(cx+Math.cos(a)*d).toFixed(1)}" cy="${(cy+Math.sin(a)*d*.75).toFixed(1)}" r="${(3+r()*3.5).toFixed(1)}"/>`;}
+  s+='<path class="river" d="M545 40 C535 110 500 160 512 240 S470 360 505 430 S480 560 520 690"/>';
+  s+='<path class="river" d="M150 70 C175 160 140 250 200 300 S230 420 210 520"/>';
+  s+='</g>';
+  s+=`<path class="coastline" d="${land}" transform="translate(6 4)"/>`;
+  s+='<text class="label-small" x="958" y="640" transform="rotate(-70 958 640)">THE GREY SOUND</text><text class="label-small" x="20" y="680">THE WESTERN APPROACHES</text>';
+  s+='<g transform="translate(948 52)"><path d="M0 -20 L6 0 L0 20 L-6 0 Z" style="fill:var(--map-ink)"/><text class="label-small" x="-4" y="-25" style="opacity:1">N</text></g>';
+  $('#terrain').innerHTML=s;
+}
+const R=id=>7+Math.sqrt(P[id].pop)*.62;
+function along(a,b,f){const A=P[a],B=P[b];return [A.x+(B.x-A.x)*f,A.y+(B.y-A.y)*f];}
+function labelPos(id){
+  const p=P[id],r=R(id),ls=p.ls||'r',dx=p.dx||0,dy=p.dy||0;
+  if(ls==='l')return {x:-r-8+dx,y:2+dy,sy:18+dy,anchor:'end'};
+  if(ls==='t')return {x:dx,y:-r-(N(id).T>=.05?24:22)+dy,sy:-r-8+dy,anchor:'middle',top:1};
+  if(ls==='b')return {x:dx,y:r+17+dy,sy:r+32+dy,anchor:'middle'};
+  return {x:r+8+dx,y:2+dy,sy:18+dy,anchor:'start'};
+}
+function renderMap(){
+  const sel=UI.sel,mode=UI.mode;let s='';
+  const targets=mode&&mode.kind==='move'?moveTargets(mode.from):null;
+  for(const [a,b,rail] of E){
+    const A=P[a],B=P[b];
+    if(!open(a,b)){const [mx,my]=along(a,b,.5);s+=`<line class="cut" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/><path class="cutx" d="M${mx-7} ${my-7} L${mx+7} ${my+7} M${mx+7} ${my-7} L${mx-7} ${my+7}"/>`;continue;}
+    s+=rail?`<line class="rail" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/><line class="rail-tie" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`:`<line class="road" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;
+    if(mode&&mode.kind==='cut'&&(a===mode.from||b===mode.from)){const o=a===mode.from?b:a;s+=`<line class="edge-pick" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/><line class="edge-hit" data-edge="${o}" tabindex="0" role="button" aria-label="Blow the link to ${esc(name(o))}" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;}
+  }
+  $('#edges').innerHTML=s;
+  // evacuation route preview for the selected place
+  let rt='';
+  if(sel&&!S.over){const path=N(sel).pop>=1&&P[sel].type!=='port'?routeToPort(sel):null;if(path&&path.length>1)rt=`<polyline class="route" points="${path.map(id=>P[id].x+','+P[id].y).join(' ')}"/>`;}
+  $('#routes').innerHTML=rt;
+  // forecast arrows
+  UI._flows=flows();
+  $('#flows').innerHTML=UI._flows.map(f=>{const [x1,y1]=along(f.from,f.to,.25),[x2,y2]=along(f.from,f.to,.62),[lx,ly]=along(f.from,f.to,.44);
+    return `<line class="flow" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke-width="${clamp(1.5+Math.sqrt(f.amt)*.7,2,6).toFixed(1)}"/><text class="flowlbl" x="${lx.toFixed(1)}" y="${(ly-6).toFixed(1)}" text-anchor="middle">~${kp(f.amt)}</text>`;}).join('');
+  // refugee columns, pointing to their next stop
+  const g={};for(const c of S.cols)g[c.at]=(g[c.at]||0)+c.count;
+  $('#cols').innerHTML=Object.entries(g).map(([id,c])=>{
+    const path=routeToPort(id);const nx=path&&path[1];
+    if(nx){const [x1,y1]=along(id,nx,.2),[x2,y2]=along(id,nx,.4);return `<g class="col"><line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/><circle cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="6"/><text x="${(x1+9).toFixed(1)}" y="${(y1+16).toFixed(1)}">${kp(c)}</text></g>`;}
+    const p=P[id],x=p.x-R(id)-10,y=p.y+R(id)+6;return `<g class="col"><circle cx="${x}" cy="${y}" r="6"/><text x="${x-12}" y="${y+18}">${kp(c)}</text></g>`;}).join('');
+  let n='';
+  for(const id in P){
+    const p=P[id],d=N(id),st=state(id),r=R(id),lp=labelPos(id);
+    const hr=d.H>=.5?r+4+Math.min(18,Math.sqrt(d.H)*1.7):0;
+    const spark=S.nextSpark&&S.nextSpark.id===id;
+    const bx=lp.top?r*.55:r*.4,by=lp.top?r+2:-r-15;
+    n+=`<g class="node ${st}" data-node="${id}" tabindex="0" role="button" aria-label="${esc(p.name)}, ${STATE_LABEL[st]}" transform="translate(${p.x} ${p.y})">
+      <circle r="${Math.max(r+12,26)}" fill="transparent"/>
+      ${hr?`<circle class="horde" r="${hr.toFixed(1)}"/>`:''}
+      ${spark?`<circle class="spark" r="${r+8}"/><text class="sparkmark" x="${-r-14}" y="${-r+4}">!</text>`:''}
+      ${sel===id?`<circle class="sel" r="${r+6}"/>`:''}
+      ${targets&&targets.has(id)?`<circle class="target" r="${r+9}"/>`:''}
+      ${p.type==='port'?`<rect class="portmark" x="${-r-4}" y="${-r-4}" width="${2*r+8}" height="${2*r+8}" transform="rotate(45)"/>`:''}
+      ${p.type==='capital'?`<circle class="portmark" r="${r+4}"/>`:''}
+      <circle class="disc" r="${r}"/>
+      ${d.evac?`<circle class="evac" cx="${(-r*.7).toFixed(1)}" cy="${(-r*.7).toFixed(1)}" r="5"/>`:''}
+      ${d.T>=.05?`<g class="badge" transform="translate(${bx.toFixed(1)} ${by.toFixed(1)})"><rect width="${bn(d.T).length*8+10}" height="17" rx="2"/><text x="5" y="13">${bn(d.T)}</text></g>`:''}
+      <text class="name" x="${lp.x}" y="${lp.y}" text-anchor="${lp.anchor}">${esc(p.name)}</text>
+      <text class="sub" x="${lp.x}" y="${lp.sy}" text-anchor="${lp.anchor}">${d.pop>=.5?kp(d.pop):'empty'}${d.H>=.5?'<tspan class="inf"> · '+kp(d.H)+' inf</tspan>':''}${p.type==='port'&&d.queue>=.5?' · '+kp(d.queue)+' quay':''}</text>
+    </g>`;
+  }
+  $('#nodes').innerHTML=n;
+  const svg=$('#map'),box=$('#mapscroll');
+  const phone=matchMedia('(max-width:700px)').matches;
+  const base=phone?900:box.clientWidth||900;
+  svg.style.width=Math.round(base*PREFS.zoom)+'px';
+  $('#modebar').innerHTML=modeText()?`<div class="modebar"><p>${modeText()}</p>${UI.mode?'<button class="btn" data-act="cancel">Cancel</button>':''}</div>`:'';
+}
+function modeText(){
+  const m=UI.mode;if(!m)return '';
+  if(m.kind==='move')return `Moving <b>${bn(m.amt)}</b> battalion${m.amt===1?'':'s'} from <b>${esc(name(m.from))}</b>. Tap a highlighted place: a neighbour by road, or anywhere along railway that isn’t infected.`;
+  return `Tap a highlighted road or railway out of <b>${esc(name(m.from))}</b>, or the place at its other end, to destroy it. This can’t be undone and blocks your own people too.`;
+}
+
+/* ---------- panels ---------- */
+function gauge(label,v,tip){const c=v<30?'low':v<50?'mid':'';return `<div class="stat gauge" title="${esc(tip)}"><span>${label} ${Math.round(v)}</span><div class="tr"><div class="fl ${c}" style="width:${v}%"></div></div></div>`;}
+function renderTop(){
+  const left=TURNS-S.turn;
+  const slots=Math.max(S.cpMax,S.cp);
+  const pips=Array.from({length:slots},(_,i)=>`<i class="${i<S.cp?'on':S.conf<30&&i===S.cpMax-1?'gone':''}"></i>`).join('');
+  $('#top').innerHTML=`<div class="brand">Last Boat to Calder<small>Vessmark · Joint Command · ${DIFFS[S.diff].name}</small></div>
+    <div class="stat"><span>${when(S.turn)}</span><b>${left} turn${left===1?'':'s'} left</b></div>
+    <div class="stat"><span>Orders</span><div class="cp" aria-label="${S.cp} orders left">${pips}</div></div>
+    <div class="stat"><span>Supply</span><b>${Math.round(S.supply)}</b></div>
+    <div class="stat"><span>Evacuated</span><b class="good">${kp(S.evacuated)}</b></div>
+    <div class="stat"><span>Lost</span><b class="bad">${kp(S.lost)}</b></div>
+    ${gauge('Public order',S.order,'Falls with civilian deaths from our strikes, sealed cities and riots. Below 35, evacuations slow down.')}
+    ${gauge('Confidence',S.conf,'The cabinet’s faith in you. Rises with ships sailing and promises kept; falls when places fall and promises break. At 80 or more you get an extra order each turn; below 30 you lose one; at 0 you are relieved of command.')}
+    <div class="stat hide-sm"><span>Infection rate</span><b class="${S.infRate>=4?'bad':''}">${Math.min(S.infRate,6)}/6</b></div>
+    ${S.march?`<div class="stat"><span>March in</span><b class="bad">${S.march.at-S.turn+1} turn${S.march.at-S.turn+1===1?'':'s'}</b></div>`:''}
+    <div class="stat hide-sm"><span>Air sorties</span><b>${S.sorties}</b></div>
+    <div class="spacer"></div>
+    <div class="topbtns"><button class="btn icon" data-act="undo" ${UI.undo.length?'':'disabled'} title="Undo last order (U)">Undo</button><button class="btn icon" data-act="help" title="How to play (?)" aria-label="How to play">?</button>
+    <button class="endturn" data-act="end" id="endturn">End turn<small>12 hours pass · E</small></button></div>`;
+  $('#ticker').innerHTML=`<span class="tag">Radio</span><p>${esc(headline())}</p>`;
+  const cb=$('#cmdbar');
+  cb.innerHTML=`<div class="msg">${UI.mode?modeText():`<b>${S.cp}</b> order${S.cp===1?'':'s'} left · ${when(S.turn)}`}</div>${UI.mode?'<button class="btn" data-act="cancel">Cancel</button>':`<button class="btn icon" data-act="undo" ${UI.undo.length?'':'disabled'}>Undo</button>`}<button class="endturn" data-act="end">End turn</button>`;
+}
+function headline(){
+  const opts=[];
+  const last=S.log.find(l=>l.t>=S.turn-1&&(l.kind==='bad'||l.kind==='key'));if(last)opts.push(last.text);
+  const bp=busiestPort();if(bp&&N(bp).queue>=10)opts.push(`Queues at ${name(bp)} stretch for miles: ${kp(N(bp).queue)} waiting for a ship.`);
+  const silent=Object.keys(P).filter(fallen);if(silent.length)opts.push(`${silent.length} town${silent.length>1?'s have':' has'} gone silent, among them ${name(silent[silent.length-1])}.`);
+  if(S.nextSpark)opts.push(`Infected travellers sighted near ${name(S.nextSpark.id)}.`);
+  if(S.order<35)opts.push('Looting reported in the capital as public order collapses.');
+  if(S.flags.cure)opts.push('Dr Okafor’s treatment is reaching the field hospitals.');
+  return opts.length?opts[S.turn%opts.length]:'All quiet.';
+}
+function evacPreview(id){
+  const n=N(id);if(P[id].type==='port')return `People here go straight onto the quay. Ships take ${capOf(id)}k a turn.`;
+  const path=routeToPort(id);if(!path)return 'No open route to any port. Evacuees would have nowhere to go.';
+  const via=path.slice(1,-1),inf=via.filter(v=>N(v).H>=.5);
+  return `Route: ${name(path[path.length-1])}${via.length?' via '+via.map(name).join(', '):''}, about ${routeTurns(path)} turn${routeTurns(path)===1?'':'s'}.${inf.length?` Passes through ${inf.length} infected place${inf.length>1?'s':''} (${inf.map(name).join(', ')}).`:''}`;
+}
+function placePanel(id){
+  const p=P[id],n=N(id),st=state(id),net=supplyNet(),inc=incoming(id);
+  const supTxt=n.T<.05?'No troops':net.has(id)?(n.sup<.999?'Short':'In supply'):n.stock>0?`Cut off · ${Math.round(n.stock)} stock`:`Cut off ${n.oos||''}`;
+  const nT=moveTargets(id).size;
+  const amts=n.T>=1?[...new Set([1,Math.round(n.T/2),Math.floor(n.T)])].filter(a=>a>=1):[];
+  let call='';
+  if(infectedState(st))call+=`<p class="callout ${st==='losing'?'bad':'good'}">${st==='losing'?(n.T<.05?`Losing: no troops here to stop ${kp(n.H)} infected.`:`Losing: the garrison can kill about ${kp(defence(id))} a turn against ${kp(n.H)} infected.`):`Holding: the garrison can kill about ${kp(defence(id))} a turn, more than the ${kp(n.H)} infected here.`}</p>`;
+  if(inc>=.8)call+=`<p class="callout bad">Next turn: about ${kp(inc)} infected heading here from ${UI._flows.filter(f=>f.to===id).map(f=>name(f.from)).join(', ')}.</p>`;
+  if(S.nextSpark&&S.nextSpark.id===id)call+=`<p class="callout bad">Infected travellers are on their way. Expect about ${kp(S.nextSpark.size)} new cases next turn.</p>`;
+  const pr=S.promises.find(x=>x.id===id&&!x.done);if(pr)call+=`<p class="callout">You promised to ${esc(pr.text)}</p>`;
+  let orders='';
+  if(n.T>=.05){
+    orders+=`<div class="sec"><p class="label">Move troops</p><div class="amts">${amts.map(a=>`<button class="btn" data-act="move" data-amt="${a}" ${S.cp<1||!nT?'disabled':''}>${a} bn</button>`).join('')}${n.T-Math.floor(n.T)>.05?`<button class="btn" data-act="move" data-amt="${n.T}" ${S.cp<1||!nT?'disabled':''}>All ${bn(n.T)}</button>`:''}</div><p class="note">A road move costs 1 order. Rail moves cost ${S.flags.ration?'2 orders (fuel rationing)':'1 order'} and reach any station along track that isn’t infected.</p></div>`;
+  }
+  const ev=n.evac;
+  orders+=`<div class="sec"><p class="label">Orders</p>${n.pop>=1||ev?`<p class="note">${esc(evacPreview(id))}</p>`:''}<div class="orders">
+    <button class="btn ${ev?'on':''}" data-act="evac" ${(!ev&&(S.cp<1||n.pop<1||fallen(id)))?'disabled':''}>${ev?'Stop evacuating':'Evacuate civilians'}<small>${ev?(n.evacT===S.turn?'Refunds the order':'Free'):'1 order · see the route above'}</small></button>
+    <button class="btn" data-act="fortify" ${S.cp<1||S.supply<8||n.F>=3||n.H>=.5?'disabled':''}>Fortify<small>1 order · 8 supply · level ${n.F}/3${n.H>=.5?' · not while infected':''}</small></button>
+    <button class="btn" data-act="airdrop" ${S.cp<1||S.supply<10?'disabled':''}>Air-drop supplies<small>1 order · 10 supply · ${net.has(id)?'not needed here':'keeps a cut-off garrison fighting'}</small></button>
+    <button class="btn" data-act="militia" ${S.cp<1||n.pop<15||fallen(id)?'disabled':''}>Raise militia<small>1 order · 10k civilians → 1 bn · order −2</small></button>
+    <button class="btn" data-act="strike" ${S.cp<2||S.sorties<1||n.H<.5?'disabled':''}>Air strike<small>2 orders · kills up to 20k infected and ${kp(n.pop*.15)} civilians</small></button>
+    <button class="btn" data-act="cut" ${S.cp<1||!nbrs(id).length||cutsLeft()<1?'disabled':''}>Blow a road or bridge<small>1 order · permanent · ${cutsLeft()} left this turn</small></button>
+  </div></div>`;
+  return `<div class="sec place"><div class="row"><div class="kind"><span class="label">${TYPE_LABEL[p.type]}</span><span class="state ${st}">${STATE_LABEL[st]}</span>${n.evac?'<span class="state evac">Evacuating</span>':''}</div><button class="btn" data-act="deselect">Close</button></div>
+    <h2>${esc(p.name)}</h2>
+    <div class="facts">
+      <div><b>${kp(n.pop)}</b><span>Civilians</span></div>
+      <div><b class="${n.H>=.5?'bad':''}">${kp(n.H)}</b><span>Infected</span></div>
+      <div><b>${bn(n.T)}</b><span>Battalions</span></div>
+      <div><b>${n.F}/3</b><span>Fortified</span></div>
+      <div><b class="${supTxt.startsWith('Cut')||supTxt==='Short'?'bad':''}" style="font-size:14px">${supTxt}</b><span>Supply</span></div>
+      ${p.type==='port'?`<div><b class="good">${kp(n.queue)}</b><span>On the quay</span></div><div><b>${capOf(id)}k</b><span>Ships / turn</span></div>`:''}
+      ${p.prod?`<div><b>+${p.prod}</b><span>Supply / turn</span></div>`:''}
+    </div>${call}
+    ${p.type==='capital'?'<p class="note">Your headquarters. If Aldermoor falls, the government falls with it. Supply only reaches places with an unbroken route to Aldermoor.</p>':''}
+    ${p.type==='port'?'<p class="note">Refugees who reach an open port wait on the quay for ships. If the port falls, everyone on the quay is lost.</p>':''}
+    </div>${orders}`;
+}
+function reportSection(){
+  const L=S.last;if(!L)return '';
+  const top=Object.entries(L.lostBy).sort((a,b)=>b[1]-a[1]).filter(e=>e[1]>=.5).slice(0,3);
+  const sailed=Object.entries(L.sailed);
+  const sgn=v=>v>=0?`+${Math.round(v)}`:`${Math.round(v)}`;
+  const lines=[];
+  lines.push({kind:'bad',text:`Lost ${kp(L.dLost)}${top.length?': '+top.map(([id,v])=>`${name(id)} ${kp(v)}`).join(', '):''}.`});
+  lines.push({kind:'good',text:sailed.length?`Sailed ${kp(L.dEvac)}: ${sailed.map(([id,v])=>`${name(id)} ${kp(v)}`).join(', ')}.`:'No ships sailed.'});
+  lines.push({kind:'',text:`Supply +${Math.round(L.prod)} produced, −${Math.round(L.upkeep)} upkeep. Public order ${sgn(L.dOrder)}, confidence ${sgn(L.dConf)}.`});
+  for(const a of L.arrivals.slice(0,4))lines.push({kind:'bad',text:a});
+  for(const r of S.report.filter(r=>r.kind).slice(0,8))lines.push(r);
+  return lines;
+}
+function situation(){
+  const rows=Object.keys(P).map(id=>({id,st:state(id),n:N(id),inc:incoming(id)}));
+  const order={losing:0,holding:1,threat:2,fallen:4,secure:3,cleared:5};
+  rows.sort((a,b)=>order[a.st]-order[b.st]||b.inc-a.inc||b.n.H-a.n.H||b.n.pop-a.n.pop);
+  const onRoad=S.cols.reduce((a,c)=>a+c.count,0);
+  const prom=S.promises.filter(p=>!p.done);
+  return `<div class="sec"><p class="label">Situation</p>
+    <div class="sitlist">${rows.filter(r=>['losing','holding','threat'].includes(r.st)).map(r=>`<button data-act="select" data-id="${r.id}"><span>${esc(name(r.id))}${S.nextSpark&&S.nextSpark.id===r.id?' <span class="bad">!</span>':''}</span><em class="${r.st==='losing'||r.st==='fallen'?'bad':''}">${STATE_LABEL[r.st]}${r.n.H>=.5?' · '+kp(r.n.H):''}${r.inc>=.8?' · ~'+kp(r.inc)+' incoming':''} · ${bn(r.n.T)} bn</em></button>`).join('')||'<p class="note">No threats.</p>'}</div>
+    ${rows.some(r=>r.st==='fallen')?`<p class="note"><b class="bad">Fallen:</b> ${rows.filter(r=>r.st==='fallen').map(r=>esc(name(r.id))).join(', ')}.</p>`:''}
+    ${S.nextSpark&&!['losing','holding','threat'].includes(state(S.nextSpark.id))?`<p class="callout bad">Infected travellers sighted near ${esc(name(S.nextSpark.id))}.</p>`:''}
+    <p class="label" style="margin-top:6px">Ports</p>
+    <div class="sitlist">${PORTS.map(id=>`<button data-act="select" data-id="${id}"><span>${esc(name(id))}</span><em class="${fallen(id)?'bad':''}">${fallen(id)?'Fallen':kp(N(id).queue)+' on the quay · ships take '+capOf(id)+'k a turn'}${!fallen(id)&&!held(id)?' · half speed':''}</em></button>`).join('')}</div>
+    ${prom.length?`<p class="label" style="margin-top:6px">Promises</p>${prom.map(p=>`<p class="callout">You promised to ${esc(p.text)}</p>`).join('')}`:''}
+    <p class="note">${onRoad>=.5?`${kp(onRoad)} refugees on the roads.`:'No refugee columns on the roads.'} Pick a place on the map or in this list to give it orders.</p></div>`;
+}
+function renderSide(){
+  const sel=UI.sel,phone=matchMedia('(max-width:700px)').matches;
+  const rep=reportSection();
+  $('#side').innerHTML=`${rep?`<div class="sec report"><div class="row"><p class="label">Last 12 hours · ${when(S.turn)}</p></div><ul class="replist">${rep.map(r=>`<li class="${r.kind}">${esc(r.text)}</li>`).join('')}</ul></div>`:''}
+    ${sel?`<div class="placewrap">${placePanel(sel)}</div>`:''}${situation()}
+    <div class="sec"><p class="label">Dispatches</p><ol class="log">${S.log.slice(0,60).map(l=>`<li class="${l.kind}"><time>${when(l.t)}</time>${esc(l.text)}</li>`).join('')}</ol></div>
+    <div class="sec"><label class="check"><input type="checkbox" id="prefreport" data-act="prefreport" ${PREFS.reportModal?'checked':''}> Pop up the report after every turn</label>
+    <button class="btn" data-act="new" id="newgame">${UI.confirmNew?'Tap again to resign and start a new campaign':'New campaign'}</button></div>`;
+  const sh=$('#sheet');
+  if(phone&&sel&&!S.over){sh.innerHTML=placePanel(sel);sh.hidden=false;}else{sh.hidden=true;sh.innerHTML='';}
+}
+const HELP=`<dl class="helpgrid">
+  <dt>Goal</dt><dd>Save as many people as you can before the last ships sail on Day 13. People shipped out count fully; people still on a quay count 75%; people still at home behind a held line count 50%.</dd>
+  <dt>k</dt><dd>Thousands of people. “35k” is 35,000.</dd>
+  <dt>inf</dt><dd>Infected. They turn the civilians around them every 12 hours and spill along open roads toward people.</dd>
+  <dt>bn</dt><dd>Battalions. Each kills about 2 thousand infected a turn when supplied, more when fortified.</dd>
+  <dt>Arrows</dt><dd>Red arrows show where hordes will move when you end the turn. A “!” marks a place where infected travellers will start a new outbreak.</dd>
+  <dt>Roads</dt><dd>Hordes, refugees and supply all move along open roads. Blowing a road is how you hold a line, but it traps your own people too.</dd>
+  <dt>Supply</dt><dd>Only reaches places with an unbroken route to Aldermoor. Cut-off garrisons weaken every turn unless you air-drop supplies.</dd>
+  <dt>Gauges</dt><dd>Public order below 35 slows evacuations. Confidence of 80 or more earns an extra order each turn; below 30 costs you one; at 0 you are relieved of command. Keeping promises is the surest way to raise it.</dd>
+  <dt>Keys</dt><dd>E ends the turn, U undoes your last order, Esc cancels or closes, + and − zoom the map.</dd>
+</dl>`;
+function renderOverlay(){
+  const o=$('#overlay');let html='';
+  if(UI.setup){
+    const st=UI.setup;
+    html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="sh"><span class="eyebrow">New campaign</span><h2 id="sh">Last Boat to Calder</h2>
+      <p class="body">You command the defence of Vessmark in the first two weeks of an outbreak. Hold the line, move your army, and get as many people as you can onto the last ships.</p>
+      <h3>Scenario</h3><div class="seg">
+        <button class="btn" data-act="setopt" data-k="scenario" data-v="kessler" aria-pressed="${st.scenario==='kessler'}">Kessler<small>The outbreak begins in the eastern city. The campaign as designed.</small></button>
+        <button class="btn" data-act="setopt" data-k="scenario" data-v="random" aria-pressed="${st.scenario==='random'}">Random outbreak<small>A different city, port capacities, storm damage and event timing.</small></button></div>
+      <h3>Difficulty</h3><div class="seg">${Object.entries(DIFFS).map(([key,d])=>`<button class="btn" data-act="setopt" data-k="diff" data-v="${key}" aria-pressed="${st.diff===key}">${d.name}<small>${d.desc}</small></button>`).join('')}</div>
+      <h3>Seed</h3><div class="field"><input id="seedinput" inputmode="numeric" placeholder="Random" value="${st.seed??''}" aria-label="Campaign seed"><span class="note">Enter a seed to replay or share a campaign.</span></div>
+      <div class="choices"><button class="btn primary" data-act="start" id="startbtn">Take command</button>${S&&!S.over&&UI.setup.canCancel?'<button class="btn" data-act="cancelsetup">Back to the current campaign</button>':''}</div></div>`;
+  } else if(UI.help){
+    html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="hh"><span class="eyebrow">Field manual</span><h2 id="hh">How to play</h2>${HELP}<div class="choices"><button class="btn primary" data-act="closehelp">Back to the map</button></div></div>`;
+  } else if(S.over){
+    const v=S.over;
+    const txt={capital:'Aldermoor has fallen. The government is gone and with it the chain of command. Whatever is left of the army fights on in pockets, but the war is over.',confidence:'The cabinet has lost faith in you. You are relieved of command and flown out on the next ship. Someone else will make the last decisions.',ports:'The last port has fallen. There is nowhere left to send anyone.'}[v.why]||(v.pct>=58?'The last ships sail at dawn on Day 13, packed to the rails. Behind you, the line still holds. History will be kind to you.':v.pct>=46?'The last ships sail at dawn on Day 13. You got more people out than anyone had a right to expect, and the line held where it mattered.':v.pct>=32?'The last ships sail at dawn on Day 13, with room to spare that nobody could reach in time.':'The last ships sail at dawn on Day 13, half empty. Most of Vessmark never made it to the coast.');
+    const worst=S.moments.slice().sort((a,b)=>b.sev-a.sev).slice(0,3);
+    html=`<div class="card ${v.why==='time'&&v.pct>=32?'':'red'}" role="dialog" aria-modal="true" aria-labelledby="oh"><span class="eyebrow">${when(v.turn)} · After-action report · ${DIFFS[S.diff].name}</span><h2 id="oh">${esc(v.grade)}</h2><p class="body">${txt}</p>
+      <div class="stats"><div><b>${Math.round(v.pct)}%</b><span>of ${Math.round(TOTAL_POP).toLocaleString()} thousand saved</span></div><div><b>${kp(S.evacuated)}</b><span>Evacuated by sea</span></div><div><b>${kp(v.sheltered+(v.milSaved||0))}</b><span>Credited behind your lines</span></div><div><b>${kp(v.stranded)}</b><span>Still alive in infected zones</span></div><div><b>${kp(S.lost+(v.milLost||0))}</b><span>Lost</span></div></div>
+      <h3>Honours</h3><div class="medals">${v.medals.map(m=>`<span class="medal ${m.won?'won':''}">${m.won?'★ ':''}${esc(m.name)}</span>`).join('')}</div>
+      ${worst.length?`<h3>Hardest moments</h3><ul>${worst.map(m=>`<li class="bad">${when(m.t)}: ${esc(m.text)}</li>`).join('')}</ul>`:''}
+      <h3>What became of them</h3><ul>${epilogue().map(l=>`<li>${esc(l)}</li>`).join('')}</ul>
+      <p class="note">Seed ${S.seed} · ${S.scenario==='random'?'Random outbreak':'Kessler'} scenario. Enter this seed in a new campaign to replay it.</p>
+      <div class="choices"><button class="btn primary" data-act="restart" id="restart">Start a new campaign</button></div></div>`;
+  } else if(S.events.length){
+    const ev=EVENTS.find(e=>e.id===S.events[0]);
+    html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="evh"><span class="eyebrow">${esc(ev.eyebrow)}</span><h2 id="evh">${esc(evTitle(ev))}</h2><p class="body">${esc(ev.body())}</p>${ev.help?HELP:''}
+      <div class="choices">${ev.choices().map((c,i)=>`<button class="btn ${i===0?'primary':''}" data-act="decide" data-i="${i}" ${c.dis?'disabled':''}>${esc(c.label)}${c.sub?`<small>${esc(c.sub)}</small>`:''}</button>`).join('')}</div></div>`;
+  } else if(UI.showReport){
+    const items=reportSection()||[];
+    html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="rh"><span class="eyebrow">${when(S.turn)}</span><h2 id="rh">Situation report</h2>
+      <ul>${items.map(r=>`<li class="${r.kind}">${esc(r.text)}</li>`).join('')}</ul>
+      <div class="choices"><button class="btn primary" data-act="closereport" id="closereport">To the map</button></div></div>`;
+  }
+  const was=!o.hidden;o.hidden=!html;o.innerHTML=html;
+  if(html&&!o.contains(document.activeElement)){const f=o.querySelector('.choices .btn:not([disabled]),.seg .btn');if(f)f.focus({preventScroll:true});}
+}
+function epilogue(){
+  const out=[];const f=S.flags;
+  out.push(f.cure?'Dr Imani Okafor’s treatment became standard issue across the coalition. She never talks about St Brennan’s.':f.okafor==='escorted'?'Dr Okafor reached Westhaven, but her samples were lost on the road.':f.okafor==='refused'?'Dr Okafor was last seen in the St Brennan’s emergency department, still working.':'Nobody knows what became of Dr Okafor.');
+  out.push(f.varga==='fellback'?(fallen('calder')?'Colonel Varga fell back to Port Calder and died on the quay wall.':'Colonel Varga held the Port Calder quays until the last ship sailed, then walked up the gangway last.'):f.varga==='held'?(fallen('torrin')?'Colonel Varga held Camp Torrin to the last man, as ordered.':'Against every expectation, Camp Torrin held. Varga was decorated twice.'):'Colonel Varga’s fate went unrecorded.');
+  out.push(f.sealed?`The mayor of ${O()} never forgave the government for the bridges.`:`The mayor of ${O()} walked out with the last column from her city.`);
+  const kept=S.promises.filter(p=>p.done==='kept').length,broke=S.promises.filter(p=>p.done==='broken').length;
+  if(kept||broke)out.push(`You kept ${kept} of ${kept+broke} promise${kept+broke===1?'':'s'}. ${broke?'People remember the ones you broke.':'People remember that.'}`);
+  return out;
+}
+function render(){renderTop();renderMap();renderSide();renderOverlay();if(!UI.setup)save();}
+
+/* ---------- input ---------- */
+function blocking(){return UI.setup||UI.help||S.over||S.events.length||UI.showReport;}
+document.addEventListener('click',e=>{
+  const b0=e.target.closest('[data-act]');
+  if(S.over&&!UI.setup&&!(b0&&['restart','closehelp','help','zoomin','zoomout'].includes(b0.dataset.act)))return;
+  const edge=e.target.closest('[data-edge]');
+  if(edge&&!blocking()&&UI.mode&&UI.mode.kind==='cut'){orderCut(UI.mode.from,edge.dataset.edge);UI.mode=null;render();return;}
+  const nd=e.target.closest('[data-node]');
+  if(nd&&!blocking()){
+    const id=nd.dataset.node;
+    if(UI.mode&&UI.mode.kind==='move'){if(moveTargets(UI.mode.from).has(id)){orderMove(UI.mode.from,id,UI.mode.amt);UI.mode=null;UI.sel=id;}else if(id===UI.mode.from)UI.mode=null;render();return;}
+    if(UI.mode&&UI.mode.kind==='cut'){if(nbrs(UI.mode.from).includes(id)){orderCut(UI.mode.from,id);UI.mode=null;}render();return;}
+    UI.sel=UI.sel===id?null:id;UI.mode=null;render();return;
+  }
+  const b=b0;if(!b||b.disabled)return;
+  const a=b.dataset.act;if(a!=='new')UI.confirmNew=false;
+  if(a==='prefreport'){PREFS.reportModal=b.checked;savePrefs();return;}
+  const allowed=['decide','closereport','restart','new','setopt','start','cancelsetup','help','closehelp','zoomin','zoomout'];
+  if(blocking()&&!allowed.includes(a))return;
+  const id=UI.sel;
+  switch(a){
+    case 'restart':openSetup(false);break;
+    case 'new':if(UI.confirmNew){UI.confirmNew=false;openSetup(true);}else UI.confirmNew=true;break;
+    case 'setopt':UI.setup[b.dataset.k]=b.dataset.v;UI.setup.seed=readSeed();break;
+    case 'start':{const sd=readSeed();newGame({scenario:UI.setup.scenario,diff:UI.setup.diff,seed:sd});UI.setup=null;UI.sel=null;UI.mode=null;UI.showReport=false;break;}
+    case 'cancelsetup':UI.setup=null;break;
+    case 'help':UI.help=true;break;
+    case 'closehelp':UI.help=false;break;
+    case 'zoomin':PREFS.zoom=Math.min(2.5,+(PREFS.zoom+.25).toFixed(2));savePrefs();break;
+    case 'zoomout':PREFS.zoom=Math.max(1,+(PREFS.zoom-.25).toFixed(2));savePrefs();break;
+    case 'decide':decide(+b.dataset.i);break;
+    case 'closereport':UI.showReport=false;break;
+    case 'end':UI.mode=null;endTurn();break;
+    case 'undo':undo();break;
+    case 'cancel':UI.mode=null;break;
+    case 'select':UI.sel=b.dataset.id;UI.mode=null;break;
+    case 'deselect':UI.sel=null;UI.mode=null;break;
+    case 'move':if(id)UI.mode={kind:'move',from:id,amt:+b.dataset.amt};break;
+    case 'cut':if(id)UI.mode={kind:'cut',from:id};break;
+    case 'evac':if(id)orderEvac(id);break;
+    case 'fortify':if(id)orderFortify(id);break;
+    case 'airdrop':if(id)orderAirdrop(id);break;
+    case 'militia':if(id)orderMilitia(id);break;
+    case 'strike':if(id)orderStrike(id);break;
+  }
+  render();
+});
+function readSeed(){const el=$('#seedinput');if(!el)return UI.setup&&UI.setup.seed;const v=el.value.trim();return v===''?null:Math.abs(parseInt(v,10))||null;}
+function openSetup(canCancel){UI.setup={scenario:S?S.scenario:'kessler',diff:S?S.diff:'regular',seed:null,canCancel};}
+document.addEventListener('keydown',e=>{
+  if(e.target.matches&&e.target.matches('input'))return;
+  if(e.key==='Escape'){
+    if(UI.mode){UI.mode=null;render();return;}
+    if(UI.help){UI.help=false;render();return;}
+    if(UI.showReport&&!S.events.length){UI.showReport=false;render();return;}
+    if(UI.sel&&!blocking()){UI.sel=null;render();return;}
+  }
+  const t=e.target.closest&&e.target.closest('[data-node],[data-edge]');
+  if(t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();t.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(e.key==='?'){UI.help=!UI.help;render();return;}
+  if(e.key==='+'||e.key==='='){$('[data-act="zoomin"]').click();return;}
+  if(e.key==='-'){$('[data-act="zoomout"]').click();return;}
+  if(blocking())return;
+  if(e.key==='e'||e.key==='E'){UI.mode=null;endTurn();render();}
+  else if(e.key==='u'||e.key==='U'){undo();render();}
+});
+let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(S)renderMap();},120);});
+
+/* ---------- boot ---------- */
+function start(data){
+  buildTerrain();
+  S=(data&&data.S&&data.S.nodes&&data.S.caps)?data.S:load();
+  UI=Object.assign({sel:null,mode:null,undo:[],setup:null,help:false,showReport:false},(data&&data.UI)||{});
+  if(!S){newGame({});openSetup(false);}
+  render();
+}
+window.claude?.hot?.snapshot?.(()=>({S,UI}));
+window.claude?.hot?.ready?window.claude.hot.ready(start):start(window.claude?.hot?.data??{});
+</script>
+</body>
+</html>
