@@ -273,6 +273,7 @@ const DIFFS={
   veteran:{name:'Veteran',cp:4,rate:1,spark:1.2,ships:.85,desc:'4 orders a turn, faster spread, smaller ships.'},
 };
 const SPARK_P=[0,.3,.45,.6,.75,.85,.9];
+const GRADES=[58,46,32]; // % saved for: Saviour of Vessmark, An orderly withdrawal, A bitter retreat (below: Catastrophe)
 const ORIGINS=['kessler','northgate','ashford','marrow','brennan','torrin','harlow'];
 
 /* ---------- helpers ---------- */
@@ -561,7 +562,7 @@ function finish(why){
   for(const p of S.promises)if(!p.done&&p.kind==='port'){if(!fallen(p.id)){p.done='kept';}else p.done='broken';}
   const timeUp=why==='time',sh=timeUp?sheltered():0,mil=militiaFate();
   const saved=S.evacuated+sh+(timeUp?mil.saved:0),pct=saved/TOTAL_POP*100;
-  const grade=why==='capital'?'The government has fallen':why==='confidence'?'Relieved of command':why==='ports'?'No way out':pct>=58?'Saviour of Vessmark':pct>=46?'An orderly withdrawal':pct>=32?'A bitter retreat':'Catastrophe';
+  const grade=why==='capital'?'The government has fallen':why==='confidence'?'Relieved of command':why==='ports'?'No way out':pct>=GRADES[0]?'Saviour of Vessmark':pct>=GRADES[1]?'An orderly withdrawal':pct>=GRADES[2]?'A bitter retreat':'Catastrophe';
   let tot=0;for(const id in P)tot+=N(id).T;
   const medals=[
     {name:'Every port held',won:PORTS.every(id=>!fallen(id))},
