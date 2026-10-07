@@ -977,7 +977,7 @@ function epilogue(){
 }
 /* ---------- after-action report, campaign history and service record ---------- */
 // Grade bands mirror finish(). They are only read here, to show how close a campaign came to the next grade.
-const AAR_GRADES=[[58,'Saviour of Vessmark'],[46,'An orderly withdrawal'],[32,'A bitter retreat'],[0,'Catastrophe']];
+const AAR_GRADES=[[GRADES[0],'Saviour of Vessmark'],[GRADES[1],'An orderly withdrawal'],[GRADES[2],'A bitter retreat'],[0,'Catastrophe']];
 const RECORD_KEY='lastboat_record_v1',RECORD_MAX=100;
 const SCEN_NAME={kessler:'Kessler',random:'Random outbreak'};
 const scName=s=>SCEN_NAME[s]||String(s);
@@ -1103,9 +1103,9 @@ function copyShare(){
 }
 function aarCard(){
   const v=S.over;
-  const txt={capital:'Aldermoor has fallen. The government is gone and with it the chain of command. Whatever is left of the army fights on in pockets, but the war is over.',confidence:'The cabinet has lost faith in you. You are relieved of command and flown out on the next ship. Someone else will make the last decisions.',ports:'The last port has fallen. There is nowhere left to send anyone.'}[v.why]||(v.pct>=58?'The last ships sail at dawn on Day 13, packed to the rails. Behind you, the line still holds. History will be kind to you.':v.pct>=46?'The last ships sail at dawn on Day 13. You got more people out than anyone had a right to expect, and the line held where it mattered.':v.pct>=32?'The last ships sail at dawn on Day 13, with room to spare that nobody could reach in time.':'The last ships sail at dawn on Day 13, half empty. Most of Vessmark never made it to the coast.');
+  const txt={capital:'Aldermoor has fallen. The government is gone and with it the chain of command. Whatever is left of the army fights on in pockets, but the war is over.',confidence:'The cabinet has lost faith in you. You are relieved of command and flown out on the next ship. Someone else will make the last decisions.',ports:'The last port has fallen. There is nowhere left to send anyone.'}[v.why]||(v.pct>=GRADES[0]?'The last ships sail at dawn on Day 13, packed to the rails. Behind you, the line still holds. History will be kind to you.':v.pct>=GRADES[1]?'The last ships sail at dawn on Day 13. You got more people out than anyone had a right to expect, and the line held where it mattered.':v.pct>=GRADES[2]?'The last ships sail at dawn on Day 13, with room to spare that nobody could reach in time.':'The last ships sail at dawn on Day 13, half empty. Most of Vessmark never made it to the coast.');
   const sh=UI.share&&UI.share.id===v.id?UI.share:null;
-  return `<div class="card aar ${v.why==='time'&&v.pct>=32?'':'red'}" role="dialog" aria-modal="true" aria-labelledby="oh"><span class="eyebrow">${when(v.turn)} · After-action report · ${esc(scName(S.scenario))} · ${esc(dfName(S.diff))}</span><h2 id="oh">${esc(v.grade)}</h2><p class="body">${txt}</p>
+  return `<div class="card aar ${v.why==='time'&&v.pct>=GRADES[2]?'':'red'}" role="dialog" aria-modal="true" aria-labelledby="oh"><span class="eyebrow">${when(v.turn)} · After-action report · ${esc(scName(S.scenario))} · ${esc(dfName(S.diff))}</span><h2 id="oh">${esc(v.grade)}</h2><p class="body">${txt}</p>
     <div class="aar-hero"><div class="aar-pct"><b>${Math.round(v.pct)}%</b><span>of ${Math.round(TOTAL_POP).toLocaleString()} thousand saved</span></div><div class="aar-grade">${gradeLadder(v)}</div></div>
     ${ledger(v)}
     ${aarChart()}
