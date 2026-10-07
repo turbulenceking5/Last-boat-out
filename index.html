@@ -507,7 +507,7 @@ function endTurn(){
   }
   // 7. ships sail
   for(const id of PORTS){const n=N(id);
-    if(fallen(id)){if(n.queue>.5){lose(id,n.queue);log(`${kp(n.queue)} people waiting on the quays at ${name(id)} are lost.`,'bad');moment(`${kp(n.queue)} people were lost on the quays at ${name(id)}.`,n.queue);}n.queue=0;continue;}
+    if(fallen(id)){lose(id,n.queue);if(n.queue>.5){log(`${kp(n.queue)} people waiting on the quays at ${name(id)} are lost.`,'bad');moment(`${kp(n.queue)} people were lost on the quays at ${name(id)}.`,n.queue);}n.queue=0;continue;}
     const cap=capOf(id)*(held(id)?1:.5);const m=Math.min(n.queue,cap);n.queue-=m;S.evacuated+=m;if(m>=.05)L.sailed[id]=m;
   }
   const sailed=Object.values(L.sailed).reduce((a,x)=>a+x,0);morale(0,Math.min(3,sailed/25));
