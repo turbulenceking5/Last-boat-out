@@ -13,13 +13,15 @@ A turn-based zombie outbreak command game. You are the general in charge of Vess
 - Public order and government confidence react to what you do. Promises, scripted decisions and a late-game march keep the pressure on.
 - You are scored on the share of the population saved. Choose a scenario (Kessler, or a random outbreak), a difficulty, and optionally a seed to replay or share a campaign.
 
-Press `?` in the game for the field manual. Keys: `E` ends the turn, `U` undoes your last order, `Esc` cancels, `+` and `−` zoom.
+- At the end of a campaign the after-action report shows how close you came to each grade, a turn-by-turn chart of people shipped out and lost, and the turning points. Your past campaigns and personal bests are kept in your browser, and any seed can be replayed or copied to share.
+
+Press `?` in the game for the field manual. Keys: `E` ends the turn, `U` undoes your last order, `Esc` cancels, `+` and `−` zoom. The game can be played by keyboard alone: `Tab` reaches the map, arrow keys move between places, and `Enter` selects a place or picks a destination. Screen readers hear each place's state and the result of every turn.
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `index.html` | The whole game: markup, styles and script in one file, no build step. Progress is saved in the browser's local storage. |
+| `index.html` | The whole game: markup, styles and script in one file, no build step. Progress and your record of past campaigns are saved in the browser's local storage. |
 | `tests/strats.js` | A library of scripted strategies (do nothing, evacuate everything, a heuristic bot, and known exploit openings) that play the game through its own functions. |
 | `tests/sim.js` | Plays seeded campaigns per strategy and prints a balance table. |
 | `tests/ui.js` | Clicks and presses keys at random for thousands of steps at desktop and phone sizes, reports any script errors, and saves screenshots to `tests/out/`. |
@@ -39,4 +41,4 @@ Any strategy in `tests/strats.js` can be run by name, with event choices overrid
 node tests/sim.js index.html 40 bEP "bEP:origin=0"
 ```
 
-Balance targets the game is tuned to (Regular difficulty, Kessler scenario): doing nothing about 14%, evacuating everything about 40%, the heuristic bot about 49%, and no turn-1 opening clearly better than steady play. The grade thresholds are 58%, 46% and 32%.
+Balance targets the game is tuned to (Regular difficulty, Kessler scenario): doing nothing about 14%, evacuating everything about 40%, the heuristic bot about 49%, and no turn-1 opening clearly better than steady play. The grade thresholds are 58%, 46% and 32% (`GRADES` in `index.html`; `tests/sim.js` reads them from there).
