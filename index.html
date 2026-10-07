@@ -630,9 +630,11 @@ const EVENTS=[
     choices:()=>[
       {label:'Fall back to Port Calder',sub:'Torrin’s garrison joins Calder, and Calder gains a level of fortification',go:()=>{N('calder').T+=N('torrin').T;N('torrin').T=0;N('calder').F=Math.min(3,N('calder').F+1);S.flags.varga='fellback';log('Camp Torrin is abandoned. Its garrison digs in at Port Calder.','key');}},
       {label:'Hold Torrin. Every day counts.',sub:'Torrin gains a level of fortification and 2 battalions from its reserve',go:()=>{N('torrin').F=Math.min(3,N('torrin').F+1);N('torrin').T+=2;S.flags.varga='held';log('Camp Torrin will hold. Varga arms his reserve and the engineers throw up another wall.','key');}}]},
-  {id:'march',turn:16,when:()=>{const s=biggestHorde();return s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
-    body:()=>{const s=biggestHorde();return `Reconnaissance flights report that the horde massed at ${name(s)}, about ${kp(N(s).H)} strong, is stirring. Analysts expect it to surge out along every open road on ${when(18)}. Anything it reaches will be hit hard.`;},
-    choices:()=>[{label:'Understood. Prepare the line.',go:()=>{const s=biggestHorde();S.march={from:s,at:17};log(`The ${name(s)} horde will march on ${when(18)}.`,'key');}}]},
+  // The march resolves in the endTurn of S.turn+1, so it is felt on when(S.turn+2). It can first qualify after turn 16, so schedule
+  // it from the turn it fires (a fixed turn 17 left late marches in the past: they never happened and the countdown went negative).
+  {id:'march',turn:16,when:()=>{const s=biggestHorde();return S.turn<=TURNS-2&&s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
+    body:()=>{const s=biggestHorde();return `Reconnaissance flights report that the horde massed at ${name(s)}, about ${kp(N(s).H)} strong, is stirring. Analysts expect it to surge out along every open road on ${when(S.turn+2)}. Anything it reaches will be hit hard.`;},
+    choices:()=>[{label:'Understood. Prepare the line.',go:()=>{const s=biggestHorde();S.march={from:s,at:S.turn+1};log(`The ${name(s)} horde will march on ${when(S.turn+2)}.`,'key');}}]},
   {id:'last',turn:22,eyebrow:'Day 12',title:'The last ships',
     body:()=>'The Admiralty signals: the last sailings leave at dawn on Day 13. Whoever is on the quays by then gets out. Everyone else stays behind your lines, or doesn’t.',
     choices:()=>[{label:'Then let’s fill them.',go:()=>{}}]},
