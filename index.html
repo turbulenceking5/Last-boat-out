@@ -78,6 +78,12 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
 #arr path{fill:#a3301f}
 #carr path{fill:#2c3a24}
 .node{cursor:pointer}
+.node:focus,.edge-hit:focus{outline:none}
+.node .focusring{fill:none;stroke:none}
+.node:focus-visible .focusring{stroke:#1b1608;stroke-width:6;stroke-opacity:.85}
+.node:focus-visible .focusring+.focusring{stroke:var(--amber);stroke-width:3;stroke-opacity:1}
+.edge-hit:focus-visible{stroke:var(--amber);stroke-opacity:.55;stroke-width:12}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .node .disc{stroke:var(--map-ink);stroke-width:2}
 .node.secure .disc{fill:#f0ead6}
 .node.threat .disc{fill:#e9c76b}
@@ -109,7 +115,8 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
 
 .btn{background:var(--panel-2);border:1px solid rgba(226,220,200,.22);border-radius:4px;padding:7px 12px;font-weight:600;line-height:1.2;text-align:left;min-height:36px}
 .btn:hover:not(:disabled){border-color:var(--amber)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn:disabled{color:rgba(228,223,207,.5);background:rgba(37,46,50,.6);cursor:not-allowed;border-style:dashed}
+.btn small.why{color:#f0b9ad;opacity:1} /* why a disabled order can't be given: kept at full contrast */
 .btn.primary{background:var(--amber);color:#1b1608;border-color:var(--amber)}
 .btn.on{border-color:var(--good);color:var(--good)}
 .btn.icon{min-width:36px;text-align:center;padding:7px 10px}
@@ -190,50 +197,131 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
   .sheet{display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:calc(60px + env(safe-area-inset-bottom,0px));max-height:58vh;overflow-y:auto;z-index:39;background:var(--panel);border-top:2px solid var(--amber);border-radius:10px 10px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.5)}
   .sheet[hidden]{display:none}
   .side .placewrap{display:none}
+  #modebar{display:none} /* the command bar already shows the same instructions */
+  /* touch: keep every tap target at least 44px */
+  .btn,.sitlist button{min-height:44px}
+  .btn.icon{min-width:44px}
+  .zoom button{width:44px;height:44px}
+  .check{min-height:44px}
+  .check input{width:22px;height:22px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* after-action report and service record (end screen, setup record) */
+:root{--aar-saved:#4d9cc9;--aar-lost:#e0703f;--aar-stranded:#7d8580}
+.card.aar{width:min(760px,100%)}
+.aar-hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 20px;align-items:center;background:rgba(0,0,0,.25);border-radius:4px;padding:12px 14px}
+.aar-pct b{display:block;font:600 40px/1 var(--font-num);font-variant-numeric:tabular-nums}
+.aar-pct span{font-size:12px;color:var(--muted);letter-spacing:.06em}
+.aar-grade{min-width:0}
+.aar-ladder .track{position:relative;height:10px;background:rgba(226,220,200,.1);border-radius:2px;margin-top:6px}
+.aar-ladder .fill{position:absolute;left:0;top:0;bottom:0;background:var(--aar-saved);border-radius:2px 0 0 2px}
+.aar-ladder .track i{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--amber)}
+.aar-ladder .track em{position:absolute;top:-6px;width:12px;height:22px;margin-left:-6px;border-radius:2px;background:var(--ink);border:2px solid var(--panel)}
+.aar-ladder .ticks{position:relative;height:18px;font:600 11px var(--font-num);color:var(--amber)}
+.aar-ladder .ticks span{position:absolute;top:5px;transform:translateX(-50%)}
+.aar-gap{margin:6px 0 0;font-size:14px;color:var(--ink)}
+.aar-ledger{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:4px 20px}
+.aar-ledger ul{list-style:none;padding:0;margin:6px 0 0;display:flex;flex-direction:column;gap:8px}
+.aar-ledger li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3px 10px;align-items:end}
+.aar-ledger .lbl{font-size:14.5px;min-width:0}
+.aar-ledger .lbl small{display:block;font-size:12px;color:var(--muted)}
+.aar-ledger li b{font:600 17px var(--font-num);font-variant-numeric:tabular-nums}
+.aar-ledger .bar{grid-column:1/-1;height:5px;background:rgba(226,220,200,.08);border-radius:2px;overflow:hidden}
+.aar-ledger .bar span{display:block;height:100%;min-width:1px;border-radius:0 2px 2px 0}
+.aar-ledger .sv,.aar-legend .sv{background:var(--aar-saved)}
+.aar-ledger .ls,.aar-legend .ls{background:var(--aar-lost)}
+.aar-ledger .st{background:var(--aar-stranded)}
+.aar-legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted)}
+.aar-legend span{display:inline-flex;align-items:center;gap:6px}
+.aar-legend i{width:14px;height:3px;border-radius:2px}
+.aar-chart{display:block;width:100%;height:auto;overflow:visible}
+.aar-chart .gl{stroke:var(--line)}
+.aar-chart .ax{font:500 11px var(--font-num);fill:var(--muted)}
+.aar-chart .dl{font:600 12px var(--font-num);fill:var(--ink)}
+.aar-chart .ln{fill:none;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.aar-chart .ln.sv{stroke:var(--aar-saved)}.aar-chart .ln.ls{stroke:var(--aar-lost)}
+.aar-chart .dot{stroke:var(--panel);stroke-width:2}
+.aar-chart .dot.sv{fill:var(--aar-saved)}.aar-chart .dot.ls{fill:var(--aar-lost)}
+.aar-chart .hit{fill:transparent}
+.aar-chart .hit:hover{fill:rgba(226,220,200,.06)}
+.aar-table summary{cursor:pointer;font-size:13px;color:var(--muted)}
+.aar-table table{border-collapse:collapse;margin-top:6px;font:13px var(--font-num);width:100%;max-width:420px}
+.aar-table th,.aar-table td{text-align:right;padding:3px 8px;border-bottom:1px solid var(--line);font-weight:400}
+.aar-table th[scope=row],.aar-table thead th:first-child{text-align:left;font-family:var(--font-ui)}
+.aar-table thead th{color:var(--muted);font-weight:600}
+.card ol.aar-tl{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.aar-tl li{position:relative;font-size:14.5px;display:flex;flex-direction:column}
+.aar-tl li::before{content:'';position:absolute;left:-20px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--blood);border:2px solid var(--panel)}
+.aar-tl li.key::before{background:var(--amber)}
+.aar-tl li.bad{color:#eaa092}.aar-tl li.key{color:var(--amber)}
+.aar-tl time{font:600 11px var(--font-num);color:var(--muted);letter-spacing:.04em}
+.aar-pb{margin:0;font-size:14.5px}
+.card ul.aar-runs{list-style:none;padding:0;gap:4px}
+.aar-runs li{display:grid;grid-template-columns:4.5em minmax(0,1fr) auto;gap:2px 10px;align-items:center;background:rgba(0,0,0,.2);border:1px solid var(--line);border-radius:4px;padding:6px 9px;font-size:13.5px}
+.aar-runs li.cur{border-color:var(--amber)}
+.aar-runs .when{font:500 12px var(--font-num);color:var(--muted)}
+.aar-runs .what{min-width:0;overflow-wrap:anywhere}
+.aar-runs b{font:600 15px var(--font-num)}
+.aar-runs .grade{grid-column:2/-1;color:var(--muted);font-size:12.5px}
+.aar-runs .btn{grid-column:3;grid-row:1/3;min-height:36px;padding:6px 10px}
+.aar-runs li:has(.btn){grid-template-columns:4.5em minmax(0,1fr) auto auto}
+.aar-runs li:has(.btn) .grade{grid-column:2/4}
+.aar-runs li:has(.btn) .btn{grid-column:4}
+.aar-seed{font-family:var(--font-num);color:var(--ink)}
+.aar-share{display:flex;flex-direction:column;gap:4px}
+.aar-share input{width:100%;background:var(--panel-2);border:1px solid rgba(226,220,200,.25);border-radius:4px;padding:8px 10px;font:13px var(--font-num)}
+.aar-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.aar-live{margin:0;font-size:13px;color:var(--good);min-height:0}
+.aar-live:empty{display:none}
+@media (max-width:480px){
+  .aar-hero{grid-template-columns:minmax(0,1fr)}
+  .aar-pct b{font-size:34px}
+  .aar-ledger{grid-template-columns:minmax(0,1fr)}
+}
 </style>
 <style>[hidden]{display:none!important}body{margin:0}:root{padding-top:env(safe-area-inset-top,0px)}</style>
 </head>
 <body>
 <div class="wrap">
   <header class="top" id="top"></header>
-  <div class="ticker" id="ticker" aria-live="polite"></div>
+  <div class="ticker" id="ticker"></div>
   <div class="main">
     <section class="mapbox">
       <div id="modebar"></div>
       <div class="mapwrap"><div class="mapscroll" id="mapscroll">
-        <svg class="map" id="map" viewBox="0 0 1000 700" role="img" aria-label="Operations map of Vessmark">
+        <svg class="map" id="map" viewBox="0 0 1000 700" role="group" aria-label="Operations map of Vessmark. Arrow keys move between places; Enter selects.">
           <defs>
             <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
             <marker id="carr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
           </defs>
-          <g id="terrain"></g><g id="edges"></g><g id="routes"></g><g id="flows"></g><g id="cols"></g><g id="nodes"></g>
+          <g id="terrain" aria-hidden="true"></g><g id="edges"></g><g id="routes" aria-hidden="true"></g><g id="flows" aria-hidden="true"></g><g id="cols" aria-hidden="true"></g><g id="nodes"></g>
         </svg>
       </div>
       <div class="zoom"><button data-act="zoomin" aria-label="Zoom in">+</button><button data-act="zoomout" aria-label="Zoom out">−</button></div></div>
-      <div class="legend" aria-label="Map key">
-        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#f0ead6" stroke="#555"/></svg>Secure</span>
-        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#e9c76b" stroke="#555"/></svg>Threatened</span>
-        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#eaa05e" stroke="#555"/></svg>Infected, holding</span>
-        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#d0532c" stroke="#555"/></svg>Infected, losing</span>
-        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#24231f" stroke="#555"/></svg>Fallen</span>
-        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#9a9686" stroke="#555"/></svg>Empty</span>
-        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="6" fill="rgba(196,67,47,.25)" stroke="#c4432f" stroke-width="1.5"/></svg>Horde (size)</span>
-        <span><svg viewBox="0 0 18 14"><line x1="1" y1="7" x2="13" y2="7" stroke="#a3301f" stroke-width="2.5"/><path d="M12 3 L17 7 L12 11 z" fill="#a3301f"/></svg>Horde moving next turn</span>
-        <span><svg viewBox="0 0 18 14"><rect x="2" y="2" width="14" height="10" rx="1.5" fill="#3d5a78"/></svg>Battalions</span>
-        <span><svg viewBox="0 0 18 14"><circle cx="9" cy="7" r="4" fill="#8fb27a" stroke="#2c3a24"/></svg>Evacuating</span>
-        <span><svg viewBox="0 0 18 14"><circle cx="6" cy="7" r="4" fill="#fff" stroke="#2c3a24"/><path d="M11 3 L17 7 L11 11 z" fill="#2c3a24"/></svg>Refugee column</span>
-        <span><svg viewBox="0 0 18 14"><rect x="4" y="2" width="10" height="10" transform="rotate(45 9 7)" fill="none" stroke="#bbb" stroke-width="1.5"/></svg>Port</span>
-        <span><svg viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="#aaa" stroke-width="3.5"/><line x1="1" y1="7" x2="17" y2="7" stroke="#1c2326" stroke-width="1.5" stroke-dasharray="2 3"/></svg>Railway</span>
-        <span><svg viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="#9c8660" stroke-width="2.5"/></svg>Road</span>
+      <div class="legend" role="group" aria-label="Map key">
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#f0ead6" stroke="#555"/></svg>Secure</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#e9c76b" stroke="#555"/></svg>Threatened</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#eaa05e" stroke="#555"/></svg>Infected, holding</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#d0532c" stroke="#555"/></svg>Infected, losing</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#24231f" stroke="#555"/></svg>Fallen</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#9a9686" stroke="#555"/></svg>Empty</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="6" fill="rgba(196,67,47,.25)" stroke="#c4432f" stroke-width="1.5"/></svg>Horde (size)</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><line x1="1" y1="7" x2="13" y2="7" stroke="#a3301f" stroke-width="2.5"/><path d="M12 3 L17 7 L12 11 z" fill="#a3301f"/></svg>Horde moving next turn</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><rect x="2" y="2" width="14" height="10" rx="1.5" fill="#3d5a78"/></svg>Battalions</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="4" fill="#8fb27a" stroke="#2c3a24"/></svg>Evacuating</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="6" cy="7" r="4" fill="#fff" stroke="#2c3a24"/><path d="M11 3 L17 7 L11 11 z" fill="#2c3a24"/></svg>Refugee column</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><rect x="4" y="2" width="10" height="10" transform="rotate(45 9 7)" fill="none" stroke="#bbb" stroke-width="1.5"/></svg>Port</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="#aaa" stroke-width="3.5"/><line x1="1" y1="7" x2="17" y2="7" stroke="#1c2326" stroke-width="1.5" stroke-dasharray="2 3"/></svg>Railway</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><line x1="1" y1="7" x2="17" y2="7" stroke="#9c8660" stroke-width="2.5"/></svg>Road</span>
       </div>
     </section>
+    <div class="sheet" id="sheet" role="region" hidden></div>
     <aside class="side" id="side"></aside>
   </div>
 </div>
-<div class="sheet" id="sheet" hidden></div>
 <div class="cmdbar" id="cmdbar"></div>
+<div id="announce" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
 <div id="overlay" class="overlay" hidden></div>
 
 <script>
@@ -273,6 +361,7 @@ const DIFFS={
   veteran:{name:'Veteran',cp:4,rate:1,spark:1.2,ships:.85,desc:'4 orders a turn, faster spread, smaller ships.'},
 };
 const SPARK_P=[0,.3,.45,.6,.75,.85,.9];
+const GRADES=[58,46,32]; // % saved for: Saviour of Vessmark, An orderly withdrawal, A bitter retreat (below: Catastrophe)
 const ORIGINS=['kessler','northgate','ashford','marrow','brennan','torrin','harlow'];
 
 /* ---------- helpers ---------- */
@@ -402,7 +491,7 @@ function spend(c){if(S.cp<c)return false;snapshot();S.cp-=c;return true;}
 function orderMove(from,to,amt){
   const c=moveCost(from,to);if(!moveTargets(from).has(to)||amt<=0||N(from).T<amt-1e-9||!spend(c))return;
   N(from).T-=amt;N(to).T+=amt;if(N(from).T<.05)N(from).T=0;
-  log(`${bn(amt)} battalion${amt===1?'':'s'} ${nbrs(from).includes(to)?'march':'go by rail'} from ${name(from)} to ${name(to)}.`);
+  log(`${bn(amt)} battalion${amt===1?'':'s'} ${nbrs(from).includes(to)?(amt===1?'marches':'march'):(amt===1?'goes by rail':'go by rail')} from ${name(from)} to ${name(to)}.`);
 }
 function orderAirdrop(id){if(S.supply<10||!spend(1))return;S.supply-=10;N(id).stock+=10;log(`Air drop: 10 supply to ${name(id)}.`);}
 function orderFortify(id){const n=N(id);if(n.F>=3||S.supply<8||n.H>=.5||!spend(1))return;S.supply-=8;n.F++;log(`Engineers fortify ${name(id)} (level ${n.F}).`);}
@@ -506,7 +595,7 @@ function endTurn(){
   }
   // 7. ships sail
   for(const id of PORTS){const n=N(id);
-    if(fallen(id)){if(n.queue>.5){lose(id,n.queue);log(`${kp(n.queue)} people waiting on the quays at ${name(id)} are lost.`,'bad');moment(`${kp(n.queue)} people were lost on the quays at ${name(id)}.`,n.queue);}n.queue=0;continue;}
+    if(fallen(id)){lose(id,n.queue);if(n.queue>.5){log(`${kp(n.queue)} people waiting on the quays at ${name(id)} are lost.`,'bad');moment(`${kp(n.queue)} people were lost on the quays at ${name(id)}.`,n.queue);}n.queue=0;continue;}
     const cap=capOf(id)*(held(id)?1:.5);const m=Math.min(n.queue,cap);n.queue-=m;S.evacuated+=m;if(m>=.05)L.sailed[id]=m;
   }
   const sailed=Object.values(L.sailed).reduce((a,x)=>a+x,0);morale(0,Math.min(3,sailed/25));
@@ -526,7 +615,7 @@ function endTurn(){
       if(nbrs(id).length)log(`Panic spreads from ${name(id)} to ${nbrs(id).filter(b=>!fallen(b)).map(name).join(', ')||'nowhere'}.`,'bad');
     }
     else if(!infectedState(before[id])&&before[id]!=='fallen'&&infectedState(now))log(`Outbreak at ${name(id)}.`,'bad');
-    else if((infectedState(before[id])||before[id]==='fallen')&&!infectedState(now)&&now!=='fallen'){log(`${name(id)} is clear of infection.`,'good');n.wasFallen=false;morale(1,3);}
+    else if((infectedState(before[id])||before[id]==='fallen')&&!infectedState(now)&&now!=='fallen'&&now!=='cleared'){log(`${name(id)} is clear of infection.`,'good');n.wasFallen=false;morale(1,3);}
   }
   for(const p of S.promises){if(p.done)continue;
     const fail=fallen(p.id)||(p.kind==='evac'&&t+1>=p.until&&N(p.id).pop>=1);
@@ -561,7 +650,7 @@ function finish(why){
   for(const p of S.promises)if(!p.done&&p.kind==='port'){if(!fallen(p.id)){p.done='kept';}else p.done='broken';}
   const timeUp=why==='time',sh=timeUp?sheltered():0,mil=militiaFate();
   const saved=S.evacuated+sh+(timeUp?mil.saved:0),pct=saved/TOTAL_POP*100;
-  const grade=why==='capital'?'The government has fallen':why==='confidence'?'Relieved of command':why==='ports'?'No way out':pct>=58?'Saviour of Vessmark':pct>=46?'An orderly withdrawal':pct>=32?'A bitter retreat':'Catastrophe';
+  const grade=why==='capital'?'The government has fallen':why==='confidence'?'Relieved of command':why==='ports'?'No way out':pct>=GRADES[0]?'Saviour of Vessmark':pct>=GRADES[1]?'An orderly withdrawal':pct>=GRADES[2]?'A bitter retreat':'Catastrophe';
   let tot=0;for(const id in P)tot+=N(id).T;
   const medals=[
     {name:'Every port held',won:PORTS.every(id=>!fallen(id))},
@@ -572,6 +661,7 @@ function finish(why){
     {name:'Every promise kept',won:S.promises.length>0&&S.promises.every(p=>p.done==='kept')},
   ];
   S.over={why,sheltered:sh,saved,pct,grade,turn:S.turn,milSaved:timeUp?mil.saved:0,milLost:timeUp?mil.lost:S.mobilized,stranded:stranded(),medals};
+  aarFinish(timeUp);
   UI.showReport=false;UI.undo=[];
 }
 
@@ -629,9 +719,11 @@ const EVENTS=[
     choices:()=>[
       {label:'Fall back to Port Calder',sub:'Torrin’s garrison joins Calder, and Calder gains a level of fortification',go:()=>{N('calder').T+=N('torrin').T;N('torrin').T=0;N('calder').F=Math.min(3,N('calder').F+1);S.flags.varga='fellback';log('Camp Torrin is abandoned. Its garrison digs in at Port Calder.','key');}},
       {label:'Hold Torrin. Every day counts.',sub:'Torrin gains a level of fortification and 2 battalions from its reserve',go:()=>{N('torrin').F=Math.min(3,N('torrin').F+1);N('torrin').T+=2;S.flags.varga='held';log('Camp Torrin will hold. Varga arms his reserve and the engineers throw up another wall.','key');}}]},
-  {id:'march',turn:16,when:()=>{const s=biggestHorde();return s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
-    body:()=>{const s=biggestHorde();return `Reconnaissance flights report that the horde massed at ${name(s)}, about ${kp(N(s).H)} strong, is stirring. Analysts expect it to surge out along every open road on ${when(18)}. Anything it reaches will be hit hard.`;},
-    choices:()=>[{label:'Understood. Prepare the line.',go:()=>{const s=biggestHorde();S.march={from:s,at:17};log(`The ${name(s)} horde will march on ${when(18)}.`,'key');}}]},
+  // The march resolves in the endTurn of S.turn+1, so it is felt on when(S.turn+2). It can first qualify after turn 16, so schedule
+  // it from the turn it fires (a fixed turn 17 left late marches in the past: they never happened and the countdown went negative).
+  {id:'march',turn:16,when:()=>{const s=biggestHorde();return S.turn<=TURNS-2&&s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
+    body:()=>{const s=biggestHorde();return `Reconnaissance flights report that the horde massed at ${name(s)}, about ${kp(N(s).H)} strong, is stirring. Analysts expect it to surge out along every open road on ${when(S.turn+2)}. Anything it reaches will be hit hard.`;},
+    choices:()=>[{label:'Understood. Prepare the line.',go:()=>{const s=biggestHorde();S.march={from:s,at:S.turn+1};log(`The ${name(s)} horde will march on ${when(S.turn+2)}.`,'key');}}]},
   {id:'last',turn:22,eyebrow:'Day 12',title:'The last ships',
     body:()=>'The Admiralty signals: the last sailings leave at dawn on Day 13. Whoever is on the quays by then gets out. Everyone else stays behind your lines, or doesn’t.',
     choices:()=>[{label:'Then let’s fill them.',go:()=>{}}]},
@@ -680,7 +772,7 @@ function renderMap(){
     const A=P[a],B=P[b];
     if(!open(a,b)){const [mx,my]=along(a,b,.5);s+=`<line class="cut" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/><path class="cutx" d="M${mx-7} ${my-7} L${mx+7} ${my+7} M${mx+7} ${my-7} L${mx-7} ${my+7}"/>`;continue;}
     s+=rail?`<line class="rail" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/><line class="rail-tie" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`:`<line class="road" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;
-    if(mode&&mode.kind==='cut'&&(a===mode.from||b===mode.from)){const o=a===mode.from?b:a;s+=`<line class="edge-pick" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/><line class="edge-hit" data-edge="${o}" tabindex="0" role="button" aria-label="Blow the link to ${esc(name(o))}" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;}
+    if(mode&&mode.kind==='cut'&&(a===mode.from||b===mode.from)){const o=a===mode.from?b:a;s+=`<line class="edge-pick" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/><line class="edge-hit" data-edge="${o}" tabindex="0" role="button" aria-label="Blow the ${isRail(a,b)?'rail bridge':'road'} from ${esc(name(mode.from))} to ${esc(name(o))}" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;}
   }
   $('#edges').innerHTML=s;
   // evacuation route preview for the selected place
@@ -698,13 +790,18 @@ function renderMap(){
     if(nx){const [x1,y1]=along(id,nx,.2),[x2,y2]=along(id,nx,.4);return `<g class="col"><line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/><circle cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="6"/><text x="${(x1+9).toFixed(1)}" y="${(y1+16).toFixed(1)}">${kp(c)}</text></g>`;}
     const p=P[id],x=p.x-R(id)-10,y=p.y+R(id)+6;return `<g class="col"><circle cx="${x}" cy="${y}" r="6"/><text x="${x-12}" y="${y+18}">${kp(c)}</text></g>`;}).join('');
   let n='';
+  const cutTo=mode&&mode.kind==='cut'?new Set(nbrs(mode.from)):null;
+  // one tab stop for the whole map (arrow keys move between places); in move/cut mode every valid pick is a tab stop too
+  let stop=UI._fnode&&P[UI._fnode]?UI._fnode:sel||'aldermoor';
   for(const id in P){
     const p=P[id],d=N(id),st=state(id),r=R(id),lp=labelPos(id);
     const hr=d.H>=.5?r+4+Math.min(18,Math.sqrt(d.H)*1.7):0;
     const spark=S.nextSpark&&S.nextSpark.id===id;
     const bx=lp.top?r*.55:r*.4,by=lp.top?r+2:-r-15;
-    n+=`<g class="node ${st}" data-node="${id}" tabindex="0" role="button" aria-label="${esc(p.name)}, ${STATE_LABEL[st]}" transform="translate(${p.x} ${p.y})">
+    const pick=(targets&&targets.has(id))||(cutTo&&cutTo.has(id));
+    n+=`<g class="node ${st}" data-node="${id}" tabindex="${id===stop||pick?0:-1}"${pick?' data-pick=""':''} role="button" aria-label="${esc(nodeLabel(id,st,targets,cutTo))}" transform="translate(${p.x} ${p.y})">
       <circle r="${Math.max(r+12,26)}" fill="transparent"/>
+      <circle class="focusring" r="${r+13}"/><circle class="focusring" r="${r+13}"/>
       ${hr?`<circle class="horde" r="${hr.toFixed(1)}"/>`:''}
       ${spark?`<circle class="spark" r="${r+8}"/><text class="sparkmark" x="${-r-14}" y="${-r+4}">!</text>`:''}
       ${sel===id?`<circle class="sel" r="${r+6}"/>`:''}
@@ -725,10 +822,28 @@ function renderMap(){
   svg.style.width=Math.round(base*PREFS.zoom)+'px';
   $('#modebar').innerHTML=modeText()?`<div class="modebar"><p>${modeText()}</p>${UI.mode?'<button class="btn" data-act="cancel">Cancel</button>':''}</div>`:'';
 }
+// spoken name for a map place: what a sighted player reads off the disc, badge and labels
+function nodeLabel(id,st,targets,cutTo){
+  const p=P[id],d=N(id),m=UI.mode,inc=incoming(id),bits=[];
+  bits.push(`${p.name}, ${TYPE_LABEL[p.type]}, ${STATE_LABEL[st]}`);
+  bits.push(d.pop>=.5?`${kp(d.pop)} civilians`:'no civilians');
+  if(d.H>=.5)bits.push(`${kp(d.H)} infected`);
+  if(d.T>=.05)bits.push(`${bn(d.T)} battalion${bn(d.T)==='1'?'':'s'}`);
+  if(d.F)bits.push(`fortified ${d.F}/3`);
+  if(P[id].type==='port'&&d.queue>=.5)bits.push(`${kp(d.queue)} on the quay`);
+  if(d.evac)bits.push('evacuating');
+  if(inc>=.8)bits.push(`about ${kp(inc)} infected heading here`);
+  if(S.nextSpark&&S.nextSpark.id===id)bits.push('new outbreak expected next turn');
+  if(UI.sel===id)bits.push('selected');
+  let s=bits.join(', ')+'.';
+  if(m&&m.kind==='move'){if(targets&&targets.has(id))s+=` Press Enter to move ${bn(m.amt)} battalion${m.amt===1?'':'s'} here.`;else if(id===m.from)s+=' Moving troops from here; press Enter to cancel.';}
+  if(m&&m.kind==='cut'&&cutTo&&cutTo.has(id))s+=` Press Enter to blow the ${isRail(m.from,id)?'rail bridge':'road'} from ${name(m.from)} to here.`;
+  return s;
+}
 function modeText(){
   const m=UI.mode;if(!m)return '';
-  if(m.kind==='move')return `Moving <b>${bn(m.amt)}</b> battalion${m.amt===1?'':'s'} from <b>${esc(name(m.from))}</b>. Tap a highlighted place: a neighbour by road, or anywhere along railway that isn’t infected.`;
-  return `Tap a highlighted road or railway out of <b>${esc(name(m.from))}</b>, or the place at its other end, to destroy it. This can’t be undone and blocks your own people too.`;
+  if(m.kind==='move')return `Moving <b>${bn(m.amt)}</b> battalion${m.amt===1?'':'s'} from <b>${esc(name(m.from))}</b>. Pick a highlighted place: a neighbour by road, or anywhere along railway that isn’t infected.`;
+  return `Pick a highlighted road or railway out of <b>${esc(name(m.from))}</b>, or the place at its other end, to destroy it. This can’t be undone and blocks your own people too.`;
 }
 
 /* ---------- panels ---------- */
@@ -739,7 +854,7 @@ function renderTop(){
   const pips=Array.from({length:slots},(_,i)=>`<i class="${i<S.cp?'on':S.conf<30&&i===S.cpMax-1?'gone':''}"></i>`).join('');
   $('#top').innerHTML=`<div class="brand">Last Boat to Calder<small>Vessmark · Joint Command · ${DIFFS[S.diff].name}</small></div>
     <div class="stat"><span>${when(S.turn)}</span><b>${left} turn${left===1?'':'s'} left</b></div>
-    <div class="stat"><span>Orders</span><div class="cp" aria-label="${S.cp} orders left">${pips}</div></div>
+    <div class="stat"><span>Orders</span><div class="cp" role="img" aria-label="${S.cp} order${S.cp===1?'':'s'} left">${pips}</div></div>
     <div class="stat"><span>Supply</span><b>${Math.round(S.supply)}</b></div>
     <div class="stat"><span>Evacuated</span><b class="good">${kp(S.evacuated)}</b></div>
     <div class="stat"><span>Lost</span><b class="bad">${kp(S.lost)}</b></div>
@@ -782,20 +897,25 @@ function placePanel(id){
   if(S.nextSpark&&S.nextSpark.id===id)call+=`<p class="callout bad">Infected travellers are on their way. Expect about ${kp(S.nextSpark.size)} new cases next turn.</p>`;
   const pr=S.promises.find(x=>x.id===id&&!x.done);if(pr)call+=`<p class="callout">You promised to ${esc(pr.text)}</p>`;
   let orders='';
+  // the first reason that applies, shown on the button in place of its cost line when it is disabled
+  const why=(...rs)=>{for(const [bad,txt] of rs)if(bad)return txt;return '';};
+  const noCp=c=>[S.cp<c,S.cp<1?'No orders left this turn':`Needs ${c} orders, ${S.cp} left`];
+  const btn=(act,label,small,reason,extra='')=>`<button class="btn${extra}" data-act="${act}" ${reason?'disabled':''}>${label}${reason?`<small class="why">${esc(reason)}</small>`:`<small>${small}</small>`}</button>`;
   if(n.T>=.05){
-    orders+=`<div class="sec"><p class="label">Move troops</p><div class="amts">${amts.map(a=>`<button class="btn" data-act="move" data-amt="${a}" ${S.cp<1||!nT?'disabled':''}>${a} bn</button>`).join('')}${n.T-Math.floor(n.T)>.05?`<button class="btn" data-act="move" data-amt="${n.T}" ${S.cp<1||!nT?'disabled':''}>All ${bn(n.T)}</button>`:''}</div><p class="note">A road move costs 1 order. Rail moves cost ${S.flags.ration?'2 orders (fuel rationing)':'1 order'} and reach any station along track that isn’t infected.</p></div>`;
+    const mWhy=why(noCp(1),[!nT,'No open road or railway out of here']);
+    orders+=`<div class="sec"><p class="label">Move troops</p><div class="amts">${amts.map(a=>`<button class="btn" data-act="move" data-amt="${a}" ${mWhy?'disabled':''}>${a} bn</button>`).join('')}${n.T-Math.floor(n.T)>.05?`<button class="btn" data-act="move" data-amt="${n.T}" ${mWhy?'disabled':''}>All ${bn(n.T)}</button>`:''}</div>${mWhy?`<p class="note"><b class="bad">Can’t move: ${esc(mWhy.toLowerCase())}.</b></p>`:''}<p class="note">A road move costs 1 order. Rail moves cost ${S.flags.ration?'2 orders (fuel rationing)':'1 order'} and reach any station along track that isn’t infected.</p></div>`;
   }
   const ev=n.evac;
   orders+=`<div class="sec"><p class="label">Orders</p>${n.pop>=1||ev?`<p class="note">${esc(evacPreview(id))}</p>`:''}<div class="orders">
-    <button class="btn ${ev?'on':''}" data-act="evac" ${(!ev&&(S.cp<1||n.pop<1||fallen(id)))?'disabled':''}>${ev?'Stop evacuating':'Evacuate civilians'}<small>${ev?(n.evacT===S.turn?'Refunds the order':'Free'):'1 order · see the route above'}</small></button>
-    <button class="btn" data-act="fortify" ${S.cp<1||S.supply<8||n.F>=3||n.H>=.5?'disabled':''}>Fortify<small>1 order · 8 supply · level ${n.F}/3${n.H>=.5?' · not while infected':''}</small></button>
-    <button class="btn" data-act="airdrop" ${S.cp<1||S.supply<10?'disabled':''}>Air-drop supplies<small>1 order · 10 supply · ${net.has(id)?'not needed here':'keeps a cut-off garrison fighting'}</small></button>
-    <button class="btn" data-act="militia" ${S.cp<1||n.pop<15||fallen(id)?'disabled':''}>Raise militia<small>1 order · 10k civilians → 1 bn · order −2</small></button>
-    <button class="btn" data-act="strike" ${S.cp<2||S.sorties<1||n.H<.5?'disabled':''}>Air strike<small>2 orders · kills up to 20k infected and ${kp(n.pop*.15)} civilians</small></button>
-    <button class="btn" data-act="cut" ${S.cp<1||!nbrs(id).length||cutsLeft()<1?'disabled':''}>Blow a road or bridge<small>1 order · permanent · ${cutsLeft()} left this turn</small></button>
+    ${btn('evac',ev?'Stop evacuating':'Evacuate civilians',ev?(n.evacT===S.turn?'Refunds the order':'Free'):'1 order · see the route above',ev?'':why([fallen(id),'This place has fallen'],[n.pop<1,'No civilians left here'],noCp(1)),ev?' on':'')}
+    ${btn('fortify','Fortify',`1 order · 8 supply · level ${n.F}/3`,why([n.F>=3,'Fully fortified (3/3)'],[n.H>=.5,'Not while infected'],noCp(1),[S.supply<8,`Needs 8 supply, you have ${Math.round(S.supply)}`]))}
+    ${btn('airdrop','Air-drop supplies',`1 order · 10 supply · ${net.has(id)?'not needed here':'keeps a cut-off garrison fighting'}`,why(noCp(1),[S.supply<10,`Needs 10 supply, you have ${Math.round(S.supply)}`]))}
+    ${btn('militia','Raise militia','1 order · 10k civilians → 1 bn · order −2',why([fallen(id),'This place has fallen'],[n.pop<15,'Needs at least 15k civilians here'],noCp(1)))}
+    ${btn('strike','Air strike',`2 orders · kills up to 20k infected and ${kp(n.pop*.15)} civilians`,why([n.H<.5,'No infected here to strike'],[S.sorties<1,'No air sorties left'],noCp(2)))}
+    ${btn('cut','Blow a road or bridge',`1 order · permanent · ${cutsLeft()} left this turn`,why([!nbrs(id).length,'No open roads left out of here'],[cutsLeft()<1,'Already blew 2 this turn (the limit)'],noCp(1)))}
   </div></div>`;
   return `<div class="sec place"><div class="row"><div class="kind"><span class="label">${TYPE_LABEL[p.type]}</span><span class="state ${st}">${STATE_LABEL[st]}</span>${n.evac?'<span class="state evac">Evacuating</span>':''}</div><button class="btn" data-act="deselect">Close</button></div>
-    <h2>${esc(p.name)}</h2>
+    <h2 tabindex="-1" data-focus="place">${esc(p.name)}</h2>
     <div class="facts">
       <div><b>${kp(n.pop)}</b><span>Civilians</span></div>
       <div><b class="${n.H>=.5?'bad':''}">${kp(n.H)}</b><span>Infected</span></div>
@@ -846,7 +966,8 @@ function renderSide(){
     <div class="sec"><label class="check"><input type="checkbox" id="prefreport" data-act="prefreport" ${PREFS.reportModal?'checked':''}> Pop up the report after every turn</label>
     <button class="btn" data-act="new" id="newgame">${UI.confirmNew?'Tap again to resign and start a new campaign':'New campaign'}</button></div>`;
   const sh=$('#sheet');
-  if(phone&&sel&&!S.over){sh.innerHTML=placePanel(sel);sh.hidden=false;}else{sh.hidden=true;sh.innerHTML='';}
+  // on a phone the sheet would cover the map, so it steps aside while you pick a destination or a road
+  if(phone&&sel&&!S.over&&!UI.mode){sh.innerHTML=placePanel(sel);sh.hidden=false;sh.setAttribute('aria-label',`Orders for ${name(sel)}`);}else{sh.hidden=true;sh.innerHTML='';}
 }
 const HELP=`<dl class="helpgrid">
   <dt>Goal</dt><dd>Save as many people as you can before the last ships sail on Day 13. People shipped out count fully; people still on a quay count 75%; people still at home behind a held line count 50%.</dd>
@@ -857,7 +978,7 @@ const HELP=`<dl class="helpgrid">
   <dt>Roads</dt><dd>Hordes, refugees and supply all move along open roads. Blowing a road is how you hold a line, but it traps your own people too.</dd>
   <dt>Supply</dt><dd>Only reaches places with an unbroken route to Aldermoor. Cut-off garrisons weaken every turn unless you air-drop supplies.</dd>
   <dt>Gauges</dt><dd>Public order below 35 slows evacuations. Confidence of 80 or more earns an extra order each turn; below 30 costs you one; at 0 you are relieved of command. Keeping promises is the surest way to raise it.</dd>
-  <dt>Keys</dt><dd>E ends the turn, U undoes your last order, Esc cancels or closes, + and − zoom the map.</dd>
+  <dt>Keys</dt><dd>E ends the turn, U undoes your last order, Esc cancels or closes, + and − zoom the map. On the map, arrow keys move between places and Enter selects one; while moving troops or blowing a road, Tab steps through the places you can pick.</dd>
 </dl>`;
 function renderOverlay(){
   const o=$('#overlay');let html='';
@@ -870,20 +991,12 @@ function renderOverlay(){
         <button class="btn" data-act="setopt" data-k="scenario" data-v="random" aria-pressed="${st.scenario==='random'}">Random outbreak<small>A different city, port capacities, storm damage and event timing.</small></button></div>
       <h3>Difficulty</h3><div class="seg">${Object.entries(DIFFS).map(([key,d])=>`<button class="btn" data-act="setopt" data-k="diff" data-v="${key}" aria-pressed="${st.diff===key}">${d.name}<small>${d.desc}</small></button>`).join('')}</div>
       <h3>Seed</h3><div class="field"><input id="seedinput" inputmode="numeric" placeholder="Random" value="${st.seed??''}" aria-label="Campaign seed"><span class="note">Enter a seed to replay or share a campaign.</span></div>
+      ${setupRecord(st)}
       <div class="choices"><button class="btn primary" data-act="start" id="startbtn">Take command</button>${S&&!S.over&&UI.setup.canCancel?'<button class="btn" data-act="cancelsetup">Back to the current campaign</button>':''}</div></div>`;
   } else if(UI.help){
     html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="hh"><span class="eyebrow">Field manual</span><h2 id="hh">How to play</h2>${HELP}<div class="choices"><button class="btn primary" data-act="closehelp">Back to the map</button></div></div>`;
   } else if(S.over){
-    const v=S.over;
-    const txt={capital:'Aldermoor has fallen. The government is gone and with it the chain of command. Whatever is left of the army fights on in pockets, but the war is over.',confidence:'The cabinet has lost faith in you. You are relieved of command and flown out on the next ship. Someone else will make the last decisions.',ports:'The last port has fallen. There is nowhere left to send anyone.'}[v.why]||(v.pct>=58?'The last ships sail at dawn on Day 13, packed to the rails. Behind you, the line still holds. History will be kind to you.':v.pct>=46?'The last ships sail at dawn on Day 13. You got more people out than anyone had a right to expect, and the line held where it mattered.':v.pct>=32?'The last ships sail at dawn on Day 13, with room to spare that nobody could reach in time.':'The last ships sail at dawn on Day 13, half empty. Most of Vessmark never made it to the coast.');
-    const worst=S.moments.slice().sort((a,b)=>b.sev-a.sev).slice(0,3);
-    html=`<div class="card ${v.why==='time'&&v.pct>=32?'':'red'}" role="dialog" aria-modal="true" aria-labelledby="oh"><span class="eyebrow">${when(v.turn)} · After-action report · ${DIFFS[S.diff].name}</span><h2 id="oh">${esc(v.grade)}</h2><p class="body">${txt}</p>
-      <div class="stats"><div><b>${Math.round(v.pct)}%</b><span>of ${Math.round(TOTAL_POP).toLocaleString()} thousand saved</span></div><div><b>${kp(S.evacuated)}</b><span>Evacuated by sea</span></div><div><b>${kp(v.sheltered+(v.milSaved||0))}</b><span>Credited behind your lines</span></div><div><b>${kp(v.stranded)}</b><span>Still alive in infected zones</span></div><div><b>${kp(S.lost+(v.milLost||0))}</b><span>Lost</span></div></div>
-      <h3>Honours</h3><div class="medals">${v.medals.map(m=>`<span class="medal ${m.won?'won':''}">${m.won?'★ ':''}${esc(m.name)}</span>`).join('')}</div>
-      ${worst.length?`<h3>Hardest moments</h3><ul>${worst.map(m=>`<li class="bad">${when(m.t)}: ${esc(m.text)}</li>`).join('')}</ul>`:''}
-      <h3>What became of them</h3><ul>${epilogue().map(l=>`<li>${esc(l)}</li>`).join('')}</ul>
-      <p class="note">Seed ${S.seed} · ${S.scenario==='random'?'Random outbreak':'Kessler'} scenario. Enter this seed in a new campaign to replay it.</p>
-      <div class="choices"><button class="btn primary" data-act="restart" id="restart">Start a new campaign</button></div></div>`;
+    html=aarCard();
   } else if(S.events.length){
     const ev=EVENTS.find(e=>e.id===S.events[0]);
     html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="evh"><span class="eyebrow">${esc(ev.eyebrow)}</span><h2 id="evh">${esc(evTitle(ev))}</h2><p class="body">${esc(ev.body())}</p>${ev.help?HELP:''}
@@ -906,7 +1019,234 @@ function epilogue(){
   if(kept||broke)out.push(`You kept ${kept} of ${kept+broke} promise${kept+broke===1?'':'s'}. ${broke?'People remember the ones you broke.':'People remember that.'}`);
   return out;
 }
-function render(){renderTop();renderMap();renderSide();renderOverlay();if(!UI.setup)save();}
+/* ---------- after-action report, campaign history and service record ---------- */
+// Grade bands mirror finish(). They are only read here, to show how close a campaign came to the next grade.
+const AAR_GRADES=[[GRADES[0],'Saviour of Vessmark'],[GRADES[1],'An orderly withdrawal'],[GRADES[2],'A bitter retreat'],[0,'Catastrophe']];
+const RECORD_KEY='lastboat_record_v1',RECORD_MAX=100;
+const SCEN_NAME={kessler:'Kessler',random:'Random outbreak'};
+const scName=s=>SCEN_NAME[s]||String(s);
+const dfName=d=>(DIFFS[d]&&DIFFS[d].name)||String(d);
+const p1=v=>(Math.round(v*10)/10).toFixed(1);
+// One point per turn: cumulative shipped out, lost and waiting on the quays.
+function histPoint(){
+  if(!S)return;if(!Array.isArray(S.hist))S.hist=[];
+  let q=0;for(const id of PORTS)q+=N(id).queue;
+  const pt={t:S.turn,ev:S.evacuated,lost:S.lost,q},last=S.hist[S.hist.length-1];
+  if(last&&last.t===S.turn)S.hist[S.hist.length-1]=pt;else S.hist.push(pt);
+}
+// Recorded from outside the simulation: endTurn is wrapped so every caller (button, key, tests) adds a point.
+endTurn=(base=>function(){const t=S&&S.turn;const r=base.apply(this,arguments);if(S&&(S.turn!==t||S.over))histPoint();return r;})(endTurn);
+// Called once from finish(): extra data for the report, and the campaign goes into the service record.
+function aarFinish(timeUp){
+  const v=S.over;let q=0;
+  if(timeUp)for(const id in P)if(held(id)&&!fallen(id))q+=N(id).queue;
+  v.quayRaw=q;v.quay=q*.75;
+  v.id=`${S.seed}-${S.scenario}-${S.diff}-${Date.now().toString(36)}${Math.floor(Math.random()*1e6).toString(36)}`;
+  v.date=new Date().toISOString();
+  histPoint();
+  v.prevBest=bestFor(S.scenario,S.diff);
+  v.recorded=recordRun(v);
+}
+function recRead(){try{const a=JSON.parse(localStorage.getItem(RECORD_KEY)||'[]');return Array.isArray(a)?a.filter(r=>r&&typeof r.pct==='number'&&r.id):[];}catch(e){return [];}}
+function bestFor(sc,diff,runs=recRead()){let b=null;for(const r of runs)if(r.scenario===sc&&r.diff===diff&&(!b||r.pct>b.pct))b=r;return b;}
+function recordRun(v){
+  const runs=recRead();if(runs.some(r=>r.id===v.id))return true;
+  runs.push({id:v.id,scenario:S.scenario,diff:S.diff,seed:S.seed,pct:Math.round(v.pct*10)/10,grade:v.grade,why:v.why,turn:v.turn,date:v.date});
+  if(runs.length>RECORD_MAX){
+    // Drop the oldest runs first, but never a personal best.
+    const keep=new Set();for(const r of runs){const b=bestFor(r.scenario,r.diff,runs);if(b)keep.add(b.id);}
+    while(runs.length>RECORD_MAX){const i=runs.findIndex(r=>!keep.has(r.id));if(i<0)break;runs.splice(i,1);}
+  }
+  try{localStorage.setItem(RECORD_KEY,JSON.stringify(runs));return true;}catch(e){return false;}
+}
+function runDate(r){try{const d=new Date(r.date);return isNaN(d)?'':d.toLocaleDateString(undefined,{day:'numeric',month:'short'});}catch(e){return '';}}
+function runRow(r,cur,btn){
+  return `<li class="${cur?'cur':''}"><span class="when">${esc(runDate(r))}</span><span class="what">${esc(scName(r.scenario))} · ${esc(dfName(r.diff))} · seed ${esc(r.seed)}${cur?' · this campaign':''}</span><b>${esc(Math.round(r.pct))}%</b><span class="grade">${esc(r.grade)}</span>${btn?`<button class="btn" data-act="userun" data-id="${esc(r.id)}" aria-label="Use seed ${esc(r.seed)}, ${esc(scName(r.scenario))}, ${esc(dfName(r.diff))}">Use seed</button>`:''}</li>`;
+}
+function gradeLadder(v){
+  const pct=v.pct,max=Math.min(100,Math.max(75,Math.ceil(pct/5)*5+5)),pos=x=>`${clamp(x/max*100,0,100)}%`;
+  const cur=AAR_GRADES.find(g=>pct>=g[0]),next=AAR_GRADES.filter(g=>g[0]>pct).pop();
+  let gap;
+  if(v.why!=='time')gap='The campaign ended before the last ships sailed, so only people already at sea count, and the grade reflects how it ended.';
+  else if(next)gap=`<b>${p1(next[0]-pct)} points</b> short of “${esc(next[1])}” (${next[0]}%).${cur[0]>0?` ${p1(pct-cur[0])} points clear of the ${cur[0]}% bar.`:''}`;
+  else gap=`<b>${p1(pct-cur[0])} points</b> above the ${cur[0]}% bar for the top grade.`;
+  const bands=AAR_GRADES.filter(g=>g[0]>0);
+  return `<div class="aar-ladder" role="img" aria-label="${p1(pct)}% saved. Grade bars at ${bands.map(g=>g[0]+'%').reverse().join(', ')}.">
+      <div class="track"><div class="fill" style="width:${pos(pct)}"></div>${bands.map(g=>`<i style="left:${pos(g[0])}" title="${esc(g[1])}"></i>`).join('')}<em style="left:${pos(pct)}"></em></div>
+      <div class="ticks">${bands.map(g=>`<span style="left:${pos(g[0])}">${g[0]}%</span>`).join('')}</div>
+    </div><p class="aar-gap">${gap}</p>`;
+}
+function ledger(v){
+  const timeUp=v.why==='time',quay=v.quay||0,home=Math.max(0,(v.sheltered||0)-quay),mil=v.milSaved||0;
+  const bar=(x,c)=>`<span class="bar"><span class="${c}" style="width:${clamp(x/TOTAL_POP*100,0,100).toFixed(2)}%"></span></span>`;
+  const row=(label,sub,x,c)=>`<li><span class="lbl">${label}${sub?`<small>${sub}</small>`:''}</span><b>${x<.05?'0':kp(x)}</b>${bar(x,c)}</li>`;
+  const saved=[row('Shipped out','Counted in full',S.evacuated,'sv')];
+  if(timeUp||quay>.05)saved.push(row('On the quay',`${(v.quayRaw||0)<.05?'Nobody':kp(v.quayRaw)} still waiting, counted at 75%`,quay,'sv'));
+  if(timeUp||home>.05)saved.push(row('Sheltered behind the line','Still at home in held places, counted at 50%',home,'sv'));
+  if(timeUp||mil>.05)saved.push(row('Militia','Surviving volunteers, counted at 50%',mil,'sv'));
+  return `<div class="aar-ledger"><div><h3>Saved · ${v.saved<.05?'0':kp(v.saved)}</h3><ul>${saved.join('')}</ul></div>
+    <div><h3>Not saved</h3><ul>${row('Lost','Killed or turned, militia included',S.lost+(v.milLost||0),'ls')}${row('Still in infected zones','Alive behind the outbreak, not counted',v.stranded||0,'st')}</ul>${timeUp?'':'<p class="note">Only people already at sea count when a campaign ends early.</p>'}</div></div>`;
+}
+function niceMax(v){const e=Math.pow(10,Math.floor(Math.log10(v/4)));for(const m of [1,1.5,2,2.5,3,4,5,6,8,10])if(m*e*4>=v)return m*e*4;return 40*e;}
+function aarChart(){
+  let h=(S.hist||[]).filter(p=>p&&Number.isFinite(p.t)&&Number.isFinite(p.ev)&&Number.isFinite(p.lost));
+  if(h.length&&h[0].t===1)h=[{t:0,ev:0,lost:0,q:0},...h];
+  if(h.length<3)return '';
+  const phone=matchMedia('(max-width:700px)').matches;
+  const W=phone?340:700,H=phone?200:230,ml=phone?40:46,mr=phone?74:96,mt=12,mb=24,pw=W-ml-mr,ph=H-mt-mb;
+  const maxT=Math.max(TURNS,h[h.length-1].t),top=niceMax(Math.max(1,...h.map(p=>Math.max(p.ev,p.lost))));
+  const x=t=>ml+t/maxT*pw,y=v=>mt+ph-v/top*ph;
+  const line=key=>h.map((p,i)=>`${i?'L':'M'}${x(p.t).toFixed(1)} ${y(p[key]).toFixed(1)}`).join(' ');
+  const grid=[0,1,2,3,4].map(i=>{const v=top*i/4;return `<line class="gl" x1="${ml}" x2="${ml+pw}" y1="${y(v)}" y2="${y(v)}"/><text class="ax" x="${ml-6}" y="${y(v)+4}" text-anchor="end">${v?kp(v):'0'}</text>`;}).join('');
+  const days=[];for(let t=0;t<=maxT;t+=phone?8:4)days.push(`<text class="ax" x="${x(t)}" y="${H-6}" text-anchor="middle">Day ${t/2+1}</text>`);
+  const end=h[h.length-1];let yl=y(end.lost),ye=y(end.ev);
+  if(Math.abs(yl-ye)<15){if(yl<=ye)ye=yl+15;else yl=ye+15;}
+  const hits=h.map((p,i)=>{const x0=i?(x(h[i-1].t)+x(p.t))/2:ml,x1=i<h.length-1?(x(p.t)+x(h[i+1].t))/2:ml+pw;return `<rect class="hit" x="${x0}" y="${mt}" width="${Math.max(1,x1-x0)}" height="${ph}"><title>${when(p.t)}: ${kp(p.ev)} shipped out, ${kp(p.lost)} lost</title></rect>`;}).join('');
+  const sum=`Shipped out rose to ${kp(end.ev)} and losses to ${kp(end.lost)} by ${when(end.t)}.`;
+  const rows=h.filter((p,i)=>p.t%2===0||i===h.length-1).map(p=>`<tr><th scope="row">${when(p.t)}</th><td>${kp(p.ev)}</td><td>${kp(p.lost)}</td></tr>`).join('');
+  return `<h3>The campaign, turn by turn</h3>
+    <div class="aar-legend" aria-hidden="true"><span><i class="sv"></i>Shipped out (running total)</span><span><i class="ls"></i>Lost (running total)</span></div>
+    <svg class="aar-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(sum)}">${grid}${days.join('')}
+      <path class="ln ls" d="${line('lost')}"/><path class="ln sv" d="${line('ev')}"/>
+      <circle class="dot ls" cx="${x(end.t)}" cy="${y(end.lost)}" r="4"/><circle class="dot sv" cx="${x(end.t)}" cy="${y(end.ev)}" r="4"/>
+      <text class="dl" x="${x(end.t)+8}" y="${yl+4}">Lost ${kp(end.lost)}</text><text class="dl" x="${x(end.t)+8}" y="${ye+4}">Shipped ${kp(end.ev)}</text>${hits}</svg>
+    <details class="aar-table"><summary>Show as a table</summary><table><thead><tr><th scope="col">When</th><th scope="col">Shipped out</th><th scope="col">Lost</th></tr></thead><tbody>${rows}</tbody></table></details>`;
+}
+function aarTimeline(v){
+  const m=(S.moments||[]).map((x,i)=>Object.assign({i},x)).sort((a,b)=>b.sev-a.sev).slice(0,5).sort((a,b)=>a.t-b.t||a.i-b.i);
+  if(!m.length)return '';
+  const endTxt={capital:'Aldermoor falls. The campaign is over.',confidence:'You are relieved of command.',ports:'The last port falls.'}[v.why]||'The last ships sail.';
+  return `<h3>Turning points</h3><ol class="aar-tl">${m.map(x=>`<li class="bad"><time>${when(x.t)}</time><span>${esc(x.text)}</span></li>`).join('')}<li class="key"><time>${when(v.turn)}</time><span>${endTxt}</span></li></ol>`;
+}
+function aarRecord(v){
+  const runs=recRead(),has=runs.some(r=>r.id===v.id);
+  if(!has&&!v.recorded)return `<h3>Service record</h3><p class="note">Your service record is not being kept: this browser is not allowing local storage.</p>`;
+  const combo=`${scName(S.scenario)} · ${dfName(S.diff)}`,pb=v.prevBest,mine=Math.round(v.pct*10)/10;
+  const line=!pb?`Your first campaign on record for ${esc(combo)}.`:mine>pb.pct?`<b class="good">New personal best</b> for ${esc(combo)}, up from ${esc(pb.pct)}% (seed ${esc(pb.seed)}).`:`Personal best for ${esc(combo)}: <b>${esc(Math.round(pb.pct))}%</b>, ${esc(pb.grade)}, seed ${esc(pb.seed)}.`;
+  const recent=runs.slice(-5).reverse();
+  return `<h3>Service record</h3><p class="aar-pb">${line}</p>${recent.length?`<ul class="aar-runs">${recent.map(r=>runRow(r,r.id===v.id,false)).join('')}</ul>`:''}`;
+}
+function setupRecord(st){
+  const runs=recRead();if(!runs.length)return '';
+  const combo=`${scName(st.scenario)} · ${dfName(st.diff)}`,pb=bestFor(st.scenario,st.diff,runs);
+  return `<h3>Service record</h3><p class="aar-pb">${pb?`Best on ${esc(combo)}: <b>${esc(Math.round(pb.pct))}%</b>, ${esc(pb.grade)}, seed ${esc(pb.seed)}.`:`No campaigns on record for ${esc(combo)} yet.`} ${runs.length} campaign${runs.length===1?'':'s'} on record.</p>
+    <ul class="aar-runs">${runs.slice(-4).reverse().map(r=>runRow(r,false,true)).join('')}</ul>`;
+}
+function shareText(){
+  const v=S.over,url=/^https?:/.test(location.protocol)?' '+location.href.split('#')[0]:'';
+  return `Last Boat to Calder · ${scName(S.scenario)} · ${dfName(S.diff)} · seed ${S.seed}: I saved ${Math.round(v.pct)}% of Vessmark (${v.grade}). Enter the seed in a new campaign to play the same outbreak.${url}`;
+}
+function copyShare(){
+  const txt=shareText(),id=S.over.id;
+  const done=ok=>{
+    UI.share={id,ok,manual:!ok};render();
+    if(!ok){const i=$('#sharetext');if(i){i.focus({preventScroll:true});i.select();try{if(document.execCommand('copy')){UI.share.ok=true;render();}}catch(e){}}}
+    const f=ok||UI.share.ok?$('#overlay [data-act="copyseed"]'):$('#sharetext');if(f)f.focus({preventScroll:true});if(f&&f.select)f.select();
+  };
+  try{if(navigator.clipboard&&window.isSecureContext)navigator.clipboard.writeText(txt).then(()=>done(true),()=>done(false));else done(false);}catch(e){done(false);}
+}
+function aarCard(){
+  const v=S.over;
+  const txt={capital:'Aldermoor has fallen. The government is gone and with it the chain of command. Whatever is left of the army fights on in pockets, but the war is over.',confidence:'The cabinet has lost faith in you. You are relieved of command and flown out on the next ship. Someone else will make the last decisions.',ports:'The last port has fallen. There is nowhere left to send anyone.'}[v.why]||(v.pct>=GRADES[0]?'The last ships sail at dawn on Day 13, packed to the rails. Behind you, the line still holds. History will be kind to you.':v.pct>=GRADES[1]?'The last ships sail at dawn on Day 13. You got more people out than anyone had a right to expect, and the line held where it mattered.':v.pct>=GRADES[2]?'The last ships sail at dawn on Day 13, with room to spare that nobody could reach in time.':'The last ships sail at dawn on Day 13, half empty. Most of Vessmark never made it to the coast.');
+  const sh=UI.share&&UI.share.id===v.id?UI.share:null;
+  return `<div class="card aar ${v.why==='time'&&v.pct>=GRADES[2]?'':'red'}" role="dialog" aria-modal="true" aria-labelledby="oh"><span class="eyebrow">${when(v.turn)} · After-action report · ${esc(scName(S.scenario))} · ${esc(dfName(S.diff))}</span><h2 id="oh">${esc(v.grade)}</h2><p class="body">${txt}</p>
+    <div class="aar-hero"><div class="aar-pct"><b>${Math.round(v.pct)}%</b><span>of ${Math.round(TOTAL_POP).toLocaleString()} thousand saved</span></div><div class="aar-grade">${gradeLadder(v)}</div></div>
+    ${ledger(v)}
+    ${aarChart()}
+    ${aarTimeline(v)}
+    <h3>Honours</h3><div class="medals">${v.medals.map(m=>`<span class="medal ${m.won?'won':''}">${m.won?'★ ':''}${esc(m.name)}</span>`).join('')}</div>
+    <h3>What became of them</h3><ul>${epilogue().map(l=>`<li>${esc(l)}</li>`).join('')}</ul>
+    ${aarRecord(v)}
+    <p class="note">Seed <b class="aar-seed">${esc(S.seed)}</b> · ${esc(scName(S.scenario))} scenario · ${esc(dfName(S.diff))}. Replay it, or share the seed so someone else can face the same outbreak.</p>
+    ${sh&&sh.manual?`<label class="aar-share"><span class="note">Copy this to share it:</span><input id="sharetext" readonly value="${esc(shareText())}"></label>`:''}
+    <div class="choices aar-actions"><button class="btn primary" data-act="restart" id="restart">Start a new campaign</button><button class="btn" data-act="replay" id="replay">Replay this seed<small>${esc(scName(S.scenario))} · ${esc(dfName(S.diff))} · seed ${esc(S.seed)}</small></button><button class="btn" data-act="copyseed" id="copyseed">${sh&&sh.ok?'Copied to the clipboard':'Copy seed to share'}<small>Seed, scenario, difficulty and your result</small></button></div>
+    <p class="aar-live" role="status">${sh?(sh.ok?'Share text copied to the clipboard.':'Copying was blocked. Select the text above to copy it.'):''}</p></div>`;
+}
+// Replay, share and service-record actions. The main click handler ignores these, so they live in their own listener.
+document.addEventListener('click',e=>{
+  const b=e.target.closest&&e.target.closest('[data-act]');if(!b||b.disabled||!S)return;
+  const a=b.dataset.act;
+  if(a==='replay'&&S.over&&!UI.setup){newGame({scenario:S.scenario,diff:S.diff,seed:S.seed});Object.assign(UI,{setup:null,help:false,sel:null,mode:null,showReport:false,share:null});render();}
+  else if(a==='copyseed'&&S.over&&!UI.setup)copyShare();
+  else if(a==='userun'&&UI.setup){const r=recRead().find(x=>x.id===b.dataset.id);if(!r)return;
+    if(SCEN_NAME[r.scenario])UI.setup.scenario=r.scenario;if(DIFFS[r.diff])UI.setup.diff=r.diff;UI.setup.seed=r.seed;render();
+    const i=$('#seedinput');if(i)i.focus({preventScroll:true});}
+});
+function render(){
+  // every render rebuilds the panels, so note what had keyboard focus and put it back afterwards
+  const ae=document.activeElement,fk=focusKey(ae),fbox=boxOf(ae),wasOv=!$('#overlay').hidden;
+  renderTop();renderMap();renderSide();renderOverlay();
+  const ov=!$('#overlay').hidden;
+  for(const el of [$('.wrap'),$('#sheet'),$('#cmdbar')])el.inert=ov; // dialogs are modal: nothing behind them can be tabbed to
+  if(ov&&!wasOv)UI._ret=fk&&{k:fk,box:fbox};
+  placeFocus(fk,fbox,wasOv,ov);
+  announce();
+  if(!UI.setup)save();
+}
+/* ---------- focus and announcements ---------- */
+const BOXES='#overlay,#sheet,#cmdbar,#top,#side,#map,#modebar';
+const boxOf=el=>el&&el.closest&&el.closest(BOXES)?.id||null;
+function focusKey(el){
+  if(!el||el===document.body||!el.dataset)return null;
+  const d=el.dataset;
+  if(d.node)return `[data-node="${d.node}"]`;
+  if(d.edge)return `[data-edge="${d.edge}"]`;
+  if(d.focus)return `[data-focus="${d.focus}"]`;
+  if(d.act){let s=`[data-act="${d.act}"]`;for(const k of ['id','k','v','amt','i'])if(d[k]!=null)s+=`[data-${k}="${d[k]}"]`;return s;}
+  return el.id?'#'+el.id:null;
+}
+function findFocus(sel,box){
+  if(!sel)return null;let els;try{els=[...document.querySelectorAll(sel)];}catch(e){return null;}
+  els=els.filter(el=>el.getClientRects().length&&!el.disabled&&!el.closest('[inert]'));
+  return els.find(el=>boxOf(el)===box)||els[0]||null;
+}
+function placeFocus(fk,fbox,wasOv,ov){
+  const want=UI._focus;UI._focus=null;
+  if(ov){const el=findFocus(fk,fbox);if(el&&boxOf(el)==='overlay')el.focus({preventScroll:true});return;} // otherwise renderOverlay focused the first choice
+  let el=null,scroll=false;
+  if(wasOv){const r=UI._ret;UI._ret=null;el=r&&findFocus(r.k,r.box);if(!el)el=findFocus(UI.sel?`[data-node="${UI.sel}"]`:'#nodes [tabindex="0"]');}
+  else if(want==='pick'&&UI.mode){
+    // straight to the first place (or road) that can be picked, scrolled into view
+    scroll=true;const m=UI.mode,box=$('#mapscroll'),k=$('#map').clientWidth/1000,A=P[m.from];
+    box.scrollLeft=A.x*k-box.clientWidth/2;box.scrollTop=A.y*k-box.clientHeight/2;
+    if(matchMedia('(max-width:700px)').matches)$('.mapbox').scrollIntoView({block:'start'});
+    el=m.kind==='cut'?findFocus('[data-edge]'):findFocus(`[data-node="${[...moveTargets(m.from)][0]}"]`);
+  }
+  else if(want==='place')el=findFocus('[data-focus="place"]');
+  else if(want)el=findFocus(want);
+  if(!el&&fk){el=findFocus(fk,fbox);if(!el)el=UI.sel?findFocus('[data-focus="place"]')||findFocus(`[data-node="${UI.sel}"]`):findFocus('#nodes [tabindex="0"]');}
+  if(el&&el!==document.activeElement)el.focus({preventScroll:!scroll});
+}
+const plain=html=>html.replace(/<[^>]+>/g,'');
+function say(msg){const a=$('#announce');if(!a||!msg)return;a.textContent='';setTimeout(()=>{a.textContent=msg;},60);}
+function announce(){
+  // tell screen readers what just happened: the turn result, an order's dispatch, or how to pick a target
+  if(UI.setup){UI._sig=null;return;}
+  const sig={seed:S.seed,turn:S.turn,len:S.log.length,top:S.log[0]&&S.log[0].text,mode:UI.mode?JSON.stringify(UI.mode):''};
+  const L=UI._sig;UI._sig=sig;
+  let msg=UI._say||'';UI._say=null;
+  const cpTxt=`${S.cp} order${S.cp===1?'':'s'} left.`;
+  if(!msg&&L&&L.seed===sig.seed&&!S.over){
+    if(sig.turn>L.turn){
+      const rep=(reportSection()||[]).filter((r,i)=>i!==2).slice(0,5).map(r=>r.text);
+      msg=`${when(S.turn)}, ${TURNS-S.turn} turn${TURNS-S.turn===1?'':'s'} left. ${rep.join(' ')} ${cpTxt}${S.events.length?' A decision is waiting.':''}`;
+    } else if(sig.turn===L.turn&&(sig.len!==L.len||sig.top!==L.top)){
+      const i=S.log.findIndex(l=>l.text===L.top);
+      const fresh=i>0?S.log.slice(0,i):sig.len>L.len?S.log.slice(0,sig.len-L.len):[];
+      if(fresh.length)msg=fresh.slice(0,3).reverse().map(l=>l.text).join(' ')+' '+cpTxt;
+    } else if(sig.mode&&sig.mode!==L.mode)msg=plain(modeText())+' Use Tab or the arrow keys to choose, Enter to confirm, Escape to cancel.';
+    else if(!sig.mode&&L.mode)msg='Cancelled.';
+  }
+  if(msg)say(msg);
+}
+// arrow keys on the map jump to the nearest place in that direction
+function nodeStep(from,key){
+  const dir={ArrowRight:[1,0],ArrowLeft:[-1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[key];if(!dir)return null;
+  const A=P[from];let best=null,bs=Infinity;
+  for(const id in P){if(id===from)continue;const dx=P[id].x-A.x,dy=P[id].y-A.y,al=dx*dir[0]+dy*dir[1];if(al<=0)continue;const sc=al+2*Math.abs(dx*dir[1]-dy*dir[0]);if(sc<bs){bs=sc;best=id;}}
+  return best;
+}
+function doUndo(){if(!UI.undo.length)return;undo();UI._say=`Last order undone. ${S.cp} order${S.cp===1?'':'s'} left.`;}
 
 /* ---------- input ---------- */
 function blocking(){return UI.setup||UI.help||S.over||S.events.length||UI.showReport;}
@@ -914,11 +1254,11 @@ document.addEventListener('click',e=>{
   const b0=e.target.closest('[data-act]');
   if(S.over&&!UI.setup&&!(b0&&['restart','closehelp','help','zoomin','zoomout'].includes(b0.dataset.act)))return;
   const edge=e.target.closest('[data-edge]');
-  if(edge&&!blocking()&&UI.mode&&UI.mode.kind==='cut'){orderCut(UI.mode.from,edge.dataset.edge);UI.mode=null;render();return;}
+  if(edge&&!blocking()&&UI.mode&&UI.mode.kind==='cut'){UI._focus=`[data-node="${UI.mode.from}"]`;orderCut(UI.mode.from,edge.dataset.edge);UI.mode=null;render();return;}
   const nd=e.target.closest('[data-node]');
   if(nd&&!blocking()){
     const id=nd.dataset.node;
-    if(UI.mode&&UI.mode.kind==='move'){if(moveTargets(UI.mode.from).has(id)){orderMove(UI.mode.from,id,UI.mode.amt);UI.mode=null;UI.sel=id;}else if(id===UI.mode.from)UI.mode=null;render();return;}
+    if(UI.mode&&UI.mode.kind==='move'){if(moveTargets(UI.mode.from).has(id)){const cp=S.cp;orderMove(UI.mode.from,id,UI.mode.amt);if(S.cp===cp)UI._say='Not enough orders left for that move.';UI.mode=null;UI.sel=id;}else if(id===UI.mode.from)UI.mode=null;else UI._say=`${name(id)} can’t be reached from ${name(UI.mode.from)}. Pick a highlighted place, or press Escape to cancel.`;render();return;}
     if(UI.mode&&UI.mode.kind==='cut'){if(nbrs(UI.mode.from).includes(id)){orderCut(UI.mode.from,id);UI.mode=null;}render();return;}
     UI.sel=UI.sel===id?null:id;UI.mode=null;render();return;
   }
@@ -941,12 +1281,12 @@ document.addEventListener('click',e=>{
     case 'decide':decide(+b.dataset.i);break;
     case 'closereport':UI.showReport=false;break;
     case 'end':UI.mode=null;endTurn();break;
-    case 'undo':undo();break;
+    case 'undo':doUndo();break;
     case 'cancel':UI.mode=null;break;
-    case 'select':UI.sel=b.dataset.id;UI.mode=null;break;
-    case 'deselect':UI.sel=null;UI.mode=null;break;
-    case 'move':if(id)UI.mode={kind:'move',from:id,amt:+b.dataset.amt};break;
-    case 'cut':if(id)UI.mode={kind:'cut',from:id};break;
+    case 'select':UI.sel=b.dataset.id;UI.mode=null;UI._focus='place';break;
+    case 'deselect':if(id)UI._focus=`[data-node="${id}"]`;UI.sel=null;UI.mode=null;break;
+    case 'move':if(id){UI.mode={kind:'move',from:id,amt:+b.dataset.amt};UI._focus='pick';}break;
+    case 'cut':if(id){UI.mode={kind:'cut',from:id};UI._focus='pick';}break;
     case 'evac':if(id)orderEvac(id);break;
     case 'fortify':if(id)orderFortify(id);break;
     case 'airdrop':if(id)orderAirdrop(id);break;
@@ -960,22 +1300,32 @@ function openSetup(canCancel){UI.setup={scenario:S?S.scenario:'kessler',diff:S?S
 document.addEventListener('keydown',e=>{
   if(e.target.matches&&e.target.matches('input'))return;
   if(e.key==='Escape'){
-    if(UI.mode){UI.mode=null;render();return;}
+    if(UI.mode){if(!(e.target.closest&&e.target.closest('[data-node]')))UI._focus=`[data-node="${UI.mode.from}"]`;UI.mode=null;render();return;}
     if(UI.help){UI.help=false;render();return;}
+    if(UI.setup&&UI.setup.canCancel&&S&&!S.over){UI.setup=null;render();return;}
     if(UI.showReport&&!S.events.length){UI.showReport=false;render();return;}
-    if(UI.sel&&!blocking()){UI.sel=null;render();return;}
+    if(UI.sel&&!blocking()){UI._focus=`[data-node="${UI.sel}"]`;UI.sel=null;render();return;}
   }
   const t=e.target.closest&&e.target.closest('[data-node],[data-edge]');
   if(t&&(e.key==='Enter'||e.key===' ')){e.preventDefault();t.dispatchEvent(new MouseEvent('click',{bubbles:true}));return;}
+  if(t&&t.dataset.node&&/^Arrow/.test(e.key)&&!e.altKey&&!e.metaKey&&!e.ctrlKey&&!e.shiftKey){
+    e.preventDefault();const to=nodeStep(t.dataset.node,e.key),el=to&&$(`#nodes [data-node="${to}"]`);if(el)el.focus();return;
+  }
   if(e.metaKey||e.ctrlKey||e.altKey)return;
   if(e.key==='?'){UI.help=!UI.help;render();return;}
   if(e.key==='+'||e.key==='='){$('[data-act="zoomin"]').click();return;}
   if(e.key==='-'){$('[data-act="zoomout"]').click();return;}
   if(blocking())return;
   if(e.key==='e'||e.key==='E'){UI.mode=null;endTurn();render();}
-  else if(e.key==='u'||e.key==='U'){undo();render();}
+  else if(e.key==='u'||e.key==='U'){doUndo();render();}
 });
-let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(S)renderMap();},120);});
+// the map has one tab stop that follows the focused place (plus every valid pick while choosing a destination or a road)
+document.addEventListener('focusin',e=>{
+  const nd=e.target.closest&&e.target.closest('#nodes [data-node]');if(!nd)return;
+  UI._fnode=nd.dataset.node;
+  for(const g of document.querySelectorAll('#nodes [data-node]'))g.setAttribute('tabindex',g===nd||g.hasAttribute('data-pick')?'0':'-1');
+});
+let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(S)render();},120);});
 
 /* ---------- boot ---------- */
 function start(data){
