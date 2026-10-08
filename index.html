@@ -978,7 +978,7 @@ const HELP=`<dl class="helpgrid">
   <dt>Roads</dt><dd>Hordes, refugees and supply all move along open roads. Blowing a road is how you hold a line, but it traps your own people too.</dd>
   <dt>Supply</dt><dd>Only reaches places with an unbroken route to Aldermoor. Cut-off garrisons weaken every turn unless you air-drop supplies.</dd>
   <dt>Gauges</dt><dd>Public order below 35 slows evacuations. Confidence of 80 or more earns an extra order each turn; below 30 costs you one; at 0 you are relieved of command. Keeping promises is the surest way to raise it.</dd>
-  <dt>Keys</dt><dd>E ends the turn, U undoes your last order, Esc cancels or closes, + and − zoom the map. On the map, arrow keys move between places and Enter selects one; while moving troops or blowing a road, Tab steps through the places you can pick.</dd>
+  <dt>Keys</dt><dd>E ends the turn, U undoes your last order, Esc cancels or closes, + and − zoom the map. On the map, arrow keys move between places and Enter selects one; while moving troops or blowing a road, Tab steps through the places you can pick. In a dialog, arrow keys step through its buttons.</dd>
 </dl>`;
 function renderOverlay(){
   const o=$('#overlay');let html='';
@@ -1133,8 +1133,15 @@ function setupRecord(st){
     <ul class="aar-runs">${runs.slice(-4).reverse().map(r=>runRow(r,false,true)).join('')}</ul>`;
 }
 function shareText(){
-  const v=S.over,url=/^https?:/.test(location.protocol)?' '+location.href.split('#')[0]:'';
-  return `Last Boat to Calder · ${scName(S.scenario)} · ${dfName(S.diff)} · seed ${S.seed}: I saved ${Math.round(v.pct)}% of Vessmark (${v.grade}). Enter the seed in a new campaign to play the same outbreak.${url}`;
+  const v=S.over,url=/^https?:/.test(location.protocol)?' '+shareLink():'';
+  return `Last Boat to Calder · ${scName(S.scenario)} · ${dfName(S.diff)} · seed ${S.seed}: I saved ${Math.round(v.pct)}% of Vessmark (${v.grade}). ${url?'Open the link to':'Enter the seed in a new campaign to'} play the same outbreak.${url}`;
+}
+// a link such as …/#seed=123&scenario=random&diff=veteran opens the setup screen with that campaign filled in
+const shareLink=()=>`${location.href.split('#')[0]}#seed=${S.seed}&scenario=${S.scenario}&diff=${S.diff}`;
+function readLink(){
+  let q;try{q=new URLSearchParams(location.hash.slice(1));}catch(e){return null;}
+  const seed=Math.abs(parseInt(q.get('seed'),10));if(!seed)return null;
+  return {seed,scenario:SCEN_NAME[q.get('scenario')]?q.get('scenario'):'kessler',diff:DIFFS[q.get('diff')]?q.get('diff'):'regular'};
 }
 function copyShare(){
   const txt=shareText(),id=S.over.id;
@@ -1312,6 +1319,12 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();const to=nodeStep(t.dataset.node,e.key),el=to&&$(`#nodes [data-node="${to}"]`);if(el)el.focus();return;
   }
   if(e.metaKey||e.ctrlKey||e.altKey)return;
+  const ov=!$('#overlay').hidden&&e.target.closest&&e.target.closest('#overlay');
+  if(ov&&/^Arrow/.test(e.key)&&!e.shiftKey&&e.target.matches('button,summary')){
+    const els=[...ov.querySelectorAll('button:not([disabled]),summary')].filter(el=>el.offsetParent!==null),i=els.indexOf(e.target);
+    if(i>=0&&els.length>1){e.preventDefault();const d=e.key==='ArrowDown'||e.key==='ArrowRight'?1:-1;els[(i+d+els.length)%els.length].focus();}
+    return;
+  }
   if(e.key==='?'){UI.help=!UI.help;render();return;}
   if(e.key==='+'||e.key==='='){$('[data-act="zoomin"]').click();return;}
   if(e.key==='-'){$('[data-act="zoomout"]').click();return;}
@@ -1332,7 +1345,10 @@ function start(data){
   buildTerrain();
   S=(data&&data.S&&data.S.nodes&&data.S.caps)?data.S:load();
   UI=Object.assign({sel:null,mode:null,undo:[],setup:null,help:false,showReport:false},(data&&data.UI)||{});
+  const had=!!S;
   if(!S){newGame({});openSetup(false);}
+  const link=!(data&&data.UI)&&readLink();
+  if(link){UI.setup={...link,canCancel:had&&!S.over};try{history.replaceState(null,'',location.href.split('#')[0]);}catch(e){}}
   render();
 }
 window.claude?.hot?.snapshot?.(()=>({S,UI}));

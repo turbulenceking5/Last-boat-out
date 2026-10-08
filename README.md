@@ -13,9 +13,9 @@ A turn-based zombie outbreak command game. You are the general in charge of Vess
 - Public order and government confidence react to what you do. Promises, scripted decisions and a late-game march keep the pressure on.
 - You are scored on the share of the population saved. Choose a scenario (Kessler, or a random outbreak), a difficulty, and optionally a seed to replay or share a campaign.
 
-- At the end of a campaign the after-action report shows how close you came to each grade, a turn-by-turn chart of people shipped out and lost, and the turning points. Your past campaigns and personal bests are kept in your browser, and any seed can be replayed or copied to share.
+- At the end of a campaign the after-action report shows how close you came to each grade, a turn-by-turn chart of people shipped out and lost, and the turning points. Your past campaigns and personal bests are kept in your browser, and any campaign can be replayed or shared as a link (for example `#seed=4242&scenario=random&diff=veteran`) that opens the setup screen with the same outbreak filled in.
 
-Press `?` in the game for the field manual. Keys: `E` ends the turn, `U` undoes your last order, `Esc` cancels, `+` and `−` zoom. The game can be played by keyboard alone: `Tab` reaches the map, arrow keys move between places, and `Enter` selects a place or picks a destination. Screen readers hear each place's state and the result of every turn.
+Press `?` in the game for the field manual. Keys: `E` ends the turn, `U` undoes your last order, `Esc` cancels, `+` and `−` zoom. The game can be played by keyboard alone: `Tab` reaches the map, arrow keys move between places, and `Enter` selects a place or picks a destination. In a dialog, arrow keys step through its buttons. Screen readers hear each place's state and the result of every turn.
 
 ## Files
 

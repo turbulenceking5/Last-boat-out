@@ -38,8 +38,8 @@ Full balance suite, 40 campaigns each (Kessler, Regular):
 
 The UI fuzzer ran 12 campaigns with no script errors and no horizontal scroll at 1280px or 390px. A campaign played to the end at both sizes showed the report, recorded the run once, kept focus inside the report, and Replay started a new campaign.
 
-## Not done
+## Follow-up
 
-- Arrow keys don't move between buttons inside a dialog (Tab does).
-- No share link that pre-fills the setup screen.
-- The UI fuzzer doesn't click Replay or Copy seed; they were tested separately.
+- Arrow keys now step through the buttons of any open dialog, in Tab order, wrapping at the ends.
+- Copy seed now includes a share link, `…/#seed=…&scenario=…&diff=…`. Opening it shows the setup screen with that campaign filled in. If you have a campaign in progress you can press Esc to go back to it. The link is removed from the address bar once read, so a reload doesn't reopen setup. Links without a valid seed are ignored.
+- The UI fuzzer doesn't click Replay or Copy seed; those, and the share link, were tested separately in Playwright.
