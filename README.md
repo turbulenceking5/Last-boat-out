@@ -8,7 +8,8 @@ A turn-based zombie outbreak command game. You are the general in charge of Vess
 
 - The map has 21 places linked by roads and railways: the capital Aldermoor (your headquarters), towns, army bases, supply depots and three evacuation ports.
 - Each turn is 12 hours, and there are 24 turns. You get a handful of orders each turn: move battalions, evacuate a place, fortify, air-drop supplies, raise militia, call an air strike, or blow a road or bridge.
-- Infected places turn their civilians every turn and spill along open roads toward people. Red arrows on the map show where each horde will move when you end the turn; a "!" marks where a new outbreak will start.
+- Infected places turn their civilians every turn and spill along open roads toward people. Each horde shows on the map as a ring of shambling figures that grows with its size. Red arrows, with figures walking along them, show where each horde will move when you end the turn; a "!" marks where a new outbreak will start.
+- Battalion badges show soldiers (one to three, by strength) and the count, and soldiers walk the route when you give a move order. Animations are switched off if your system asks for reduced motion.
 - Refugee columns walk to the nearest open port and wait on the quay for ships. Ships carry a fixed number each turn.
 - Public order and government confidence react to what you do. Promises, scripted decisions and a late-game march keep the pressure on.
 - You are scored on the share of the population saved. Choose a scenario (Kessler, or a random outbreak), a difficulty, and optionally a seed to replay or share a campaign.
