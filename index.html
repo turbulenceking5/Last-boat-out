@@ -436,6 +436,14 @@ const bn=v=>v<.05?'0':v<1?String(Math.round(v*10)/10):String(Math.round(v));
 function mulberry(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
 let rng=Math.random;
 const when=t=>`Day ${Math.floor(t/2)+1} · ${t%2?'Night':'Morning'}`;
+// Night: the 12 hours resolved from an odd turn. Hordes travel further, unlit garrisons fight worse, columns caught on the road suffer more.
+const nightOf=t=>t%2===1;
+const isNight=()=>nightOf(S.turn);
+const NIGHT={spill:1.15,day:.85,fight:.85,cols:1.3};
+// Veterancy: 0 green .. 3 elite. Each level adds 12% to a garrison's killing power and cuts its losses.
+const VET_NAMES=['Green','Blooded','Veteran','Elite'];
+const vetLvl=n=>Math.floor((n.V||0)+1e-9);
+const vetName=n=>VET_NAMES[Math.min(3,vetLvl(n))];
 const isRail=(a,b)=>E.some(e=>e[2]&&((e[0]===a&&e[1]===b)||(e[0]===b&&e[1]===a)));
 const open=(a,b)=>!S.cut.includes(ek(a,b));
 const nbrs=a=>E.filter(e=>e[0]===a||e[1]===a).map(e=>e[0]===a?e[1]:e[0]).filter(b=>open(a,b));
@@ -452,14 +460,14 @@ function newGame(opts={}){
   const seed=Number.isFinite(opts.seed)?opts.seed:Math.floor(Math.random()*1e9);
   rng=mulberry(seed);const D=DIFFS[diff];
   const nodes={};
-  for(const [id,p] of Object.entries(P))nodes[id]={pop:p.pop,H:0,T:p.T||0,F:0,stock:0,evac:false,evacT:-1,queue:0,sup:1,oos:0,wasFallen:false};
+  for(const [id,p] of Object.entries(P))nodes[id]={pop:p.pop,H:0,T:p.T||0,V:p.type==='base'?1:0,F:0,stock:0,evac:false,evacT:-1,queue:0,sup:1,oos:0,wasFallen:false};
   let origin='kessler',cut=[],caps={},shift={};
   if(scenario==='random'){
     origin=ORIGINS[Math.floor(rng()*ORIGINS.length)];
     for(const id of PORTS)caps[id]=Math.round(P[id].cap*(.75+rng()*.5));
     const cand=E.filter(e=>!e.includes('aldermoor')&&!PORTS.some(p=>e.includes(p))&&!e.includes(origin));
     for(let i=0;i<2;i++){const e=cand.splice(Math.floor(rng()*cand.length),1)[0];cut.push(ek(e[0],e[1]));}
-    for(const id of ['okafor','fuel','recall','navy','promise_hold','promise_evac','torrin'])shift[id]=Math.floor(rng()*3)-1;
+    for(const id of ['okafor','fuel','blackout','recall','navy','promise_hold','promise_evac','torrin'])shift[id]=Math.floor(rng()*3)-1;
   } else for(const id of PORTS)caps[id]=P[id].cap;
   for(const id of PORTS)caps[id]=Math.round(caps[id]*D.ships);
   const o=nodes[origin];o.H=origin==='kessler'?95+Math.round(rng()*20):Math.round(P[origin].pop*.9+15+rng()*10);
@@ -482,7 +490,10 @@ function morale(dOrder,dConf){S.order=clamp(S.order+dOrder,0,100);S.conf=clamp(S
 
 /* ---------- reading the situation ---------- */
 const N=id=>S.nodes[id];
-const defence=id=>{const n=N(id);return n.T*2.2*(n.sup??1)*(1+.5*n.F);};
+const nightFight=n=>isNight()&&!n.F&&!S.flags.floodlights&&vetLvl(n)<2?NIGHT.fight:1;
+const defence=id=>{const n=N(id);return n.T*2.2*(n.sup??1)*(1+.5*n.F)*(1+.12*(n.V||0))*nightFight(n);};
+// adds battalions to a place; their experience mixes in proportion to numbers
+function addT(id,amt,v=0){const n=N(id),t=n.T+amt;n.V=t>.05?((n.V||0)*Math.max(0,n.T)+v*amt)/t:0;n.T=t;}
 const fallen=id=>{const n=N(id),alive=n.pop+n.queue;return n.H>=.5&&n.T<.3&&(alive<1||n.H>=alive*3);};
 const held=id=>{const n=N(id);return n.H<.5||defence(id)>=n.H;};
 function state(id){
@@ -533,7 +544,7 @@ function plan(){
     if(cand.length){S.nextSpark={id:pickW(cand,cand.map(id=>Math.sqrt(N(id).pop))),size:(1.5+lvl*.8+rng()*2)*DIFFS[S.diff].spark};log(`Infected travellers sighted near ${name(S.nextSpark.id)}. Expect cases there next turn.`,'bad');}
   }
 }
-function spillOut(id,Hafter){const n=N(id);return Hafter*(n.pop+n.queue<1?.32:.13)*(S.intent[id]??1);}
+function spillOut(id,Hafter){const n=N(id);return Hafter*(n.pop+n.queue<1?.32:.13)*(S.intent[id]??1)*(isNight()?NIGHT.spill:NIGHT.day);}
 function flows(){
   const out=[];
   for(const id in P){const n=N(id);if(n.H<1)continue;
@@ -551,7 +562,7 @@ function snapshot(){UI.undo.push(JSON.stringify(S));if(UI.undo.length>30)UI.undo
 function spend(c){if(S.cp<c)return false;snapshot();S.cp-=c;return true;}
 function orderMove(from,to,amt){
   const c=moveCost(from,to);if(!moveTargets(from).has(to)||amt<=0||N(from).T<amt-1e-9||!spend(c))return;
-  N(from).T-=amt;N(to).T+=amt;if(N(from).T<.05)N(from).T=0;
+  N(from).T-=amt;addT(to,amt,N(from).V||0);if(N(from).T<.05){N(from).T=0;N(from).V=0;}
   log(`${bn(amt)} battalion${amt===1?'':'s'} ${nbrs(from).includes(to)?(amt===1?'marches':'march'):(amt===1?'goes by rail':'go by rail')} from ${name(from)} to ${name(to)}.`);
 }
 function orderAirdrop(id){if(S.supply<10||!spend(1))return;S.supply-=10;N(id).stock+=10;log(`Air drop: 10 supply to ${name(id)}.`);}
@@ -561,11 +572,17 @@ function orderEvac(id){
   if(n.evac){snapshot();n.evac=false;if(n.evacT===S.turn){S.cp++;n.evacT=-1;}log(`Evacuation of ${name(id)} halted.`);return;}
   if(fallen(id)||n.pop<1||!spend(1))return;n.evac=true;n.evacT=S.turn;log(`Evacuation ordered for ${name(id)}.`,'key');
 }
-function orderMilitia(id){const n=N(id);if(n.pop<15||fallen(id)||!spend(1))return;n.pop-=10;n.T+=1;S.mobilized+=10;morale(-2,0);log(`${name(id)} raises a militia battalion from 10k volunteers.`);}
+function orderMilitia(id){const n=N(id);if(n.pop<15||fallen(id)||!spend(1))return;n.pop-=10;addT(id,1);S.mobilized+=10;morale(-2,0);log(`${name(id)} raises a militia battalion from 10k volunteers.`);}
 function orderStrike(id){const n=N(id);if(S.sorties<1||n.H<.5||!spend(2))return;S.sorties--;
   const kh=Math.min(n.H*.6,20),kc=n.pop*.15;n.H-=kh;n.pop-=kc;S.lost+=kc;S.strikeKilled+=kc;
   if(kc>=1){morale(-5,-2);moment(`Our own air strike killed ${kp(kc)} civilians in ${name(id)}.`,kc);}
   log(`Air strike on ${name(id)}: about ${kp(kh)} infected destroyed.${kc>=.5?` ${kp(kc)} civilians died with them.`:''}`,'bad');}
+// Airlift: one helicopter sortie flies up to LIFT k civilians onto the least crowded open quay.
+const LIFT=6;
+function liftPort(){return PORTS.filter(portOpen).sort((a,b)=>N(a).queue/Math.max(1,capOf(a))-N(b).queue/Math.max(1,capOf(b)))[0];}
+function orderAirlift(id){const n=N(id),to=liftPort();if(S.sorties<1||fallen(id)||n.pop<1||P[id].type==='port'||!to||!spend(1))return;
+  S.sorties--;let m=Math.min(n.pop,LIFT);if(n.pop-m<.5)m=n.pop;n.pop-=m;N(to).queue+=m;if(n.pop<.5){n.pop=0;n.evac=false;}
+  log(`Helicopters lift ${kp(m)} civilians out of ${name(id)} to the quay at ${name(to)}.`,'key');}
 const cutsLeft=()=>S.cutT===S.turn?2-S.cutN:2;
 function orderCut(a,b){
   if(!open(a,b)||cutsLeft()<1||!spend(1))return;
@@ -597,11 +614,12 @@ function endTurn(){
   }
   if(ratio<.999)log(`Supply shortfall: units are on ${Math.round(ratio*100)}% rations.`,'bad');
   // 3. fighting and infection
-  const convRate=S.flags.cure?.5:.9;
+  const convRate=(S.flags.cure?.5:.9)*(S.flags.hospitals?.85:1);
   for(const id in P){const n=N(id);if(n.H<.05){n.H=0;continue;}
     const fort=1+.5*n.F;
     const kill=Math.min(n.H,defence(id));const H0=n.H;n.H-=kill;
-    const tl=Math.min(n.T,H0*.045/fort);n.T-=tl;S.tLost+=tl;
+    const tl=Math.min(n.T,H0*.045/fort/(1+.15*(n.V||0)));n.T-=tl;S.tLost+=tl;
+    if(n.T>=.05&&kill>=.5){const v0=vetLvl(n);n.V=Math.min(3,(n.V||0)+kill/(n.T*6+3));if(vetLvl(n)>v0&&vetLvl(n)>(n.vb||0)){n.vb=vetLvl(n);log(`The garrison at ${name(id)} is now ${VET_NAMES[vetLvl(n)].toLowerCase()}.`,'good');if(vetLvl(n)>=3)S.flags.elite=1;}}
     const popF=n.pop/(n.pop+40);
     const conv=Math.min(n.pop,n.pop*.16+.5,n.H*convRate*popF/(1+n.T*.1)+(n.H>0?.3:0));
     n.pop-=conv;n.H+=conv;lose(id,conv);
@@ -638,7 +656,7 @@ function endTurn(){
       const nx=path[i];c.at=nx;
       if(c.seed){const l=c.count*.03;c.count-=l;N(nx).H+=l;lose(nx,l);c.seed=false;}
       const n=N(nx);
-      if(n.H>=.5){const f=n.H/(n.H+25+n.T*8)*.8,l=c.count*f;c.count-=l;n.H+=l*.8;lose(nx,l);hurt+=l;}
+      if(n.H>=.5){const f=n.H/(n.H+25+n.T*8)*.8*(isNight()&&!S.flags.roadlights?NIGHT.cols:1),l=c.count*Math.min(.9,f);c.count-=l;n.H+=l*.8;lose(nx,l);hurt+=l;}
       if(portOpen(nx)){n.queue+=c.count;c.count=0;break;}
       if(!(isRail(path[i-1],nx)&&steps<2&&n.H<.5&&i+1<path.length&&isRail(nx,path[i+1])))break;steps++;i++;
     }
@@ -662,9 +680,9 @@ function endTurn(){
   const sailed=Object.values(L.sailed).reduce((a,x)=>a+x,0);morale(0,Math.min(3,sailed/25));
   // 8. reinforcements, recalls
   if(t>=2){
-    if(!fallen('aldermoor'))N('aldermoor').T+=1;
-    if(!fallen('brannock'))N('brannock').T+=.75;
-    if(!fallen('torrin')&&t%2===0)N('torrin').T+=.5;
+    if(!fallen('aldermoor'))addT('aldermoor',1);
+    if(!fallen('brannock'))addT('brannock',.75);
+    if(!fallen('torrin')&&t%2===0)addT('torrin',.5);
   }
   if(S.flags.recallAt===t){const src=['brannock','aldermoor'].find(id=>N(id).T>=2)||'aldermoor';const r=Math.min(2,N(src).T);N(src).T-=r;log(`${bn(r)} battalions leave ${name(src)} for the coalition.`,'key');}
   // 9. what changed: falls, chain reactions, clearances, promises
@@ -720,6 +738,7 @@ function finish(why){
     {name:'Army intact',won:tot>=S.initT},
     {name:`${name(S.origin)} never sealed`,won:!S.flags.sealed&&nbrs(S.origin).length===E.filter(e=>e.includes(S.origin)).length},
     {name:'Every promise kept',won:S.promises.length>0&&S.promises.every(p=>p.done==='kept')},
+    {name:'An elite garrison',won:!!S.flags.elite},
   ];
   S.over={why,sheltered:sh,saved,pct,grade,turn:S.turn,milSaved:timeUp?mil.saved:0,milLost:timeUp?mil.lost:S.mobilized,stranded:stranded(),medals};
   aarFinish(timeUp);
@@ -742,8 +761,15 @@ const EVENTS=[
   {id:'okafor',turn:3,when:()=>!fallen('brennan')&&S.origin!=='brennan',eyebrow:'Decision',title:'Dr Okafor’s research',
     body:()=>'Dr Imani Okafor at St Brennan’s says she is close to a treatment that slows the turn. She needs an armed escort to get her team and samples out to Westhaven. It will take a battalion off the line for good, and the treatment needs three turns to reach the field.',
     choices:()=>{const src=['brennan','larch','torrin','aldermoor'].find(id=>N(id).T>=1&&!fallen(id));return [
-      {label:src?`Send a battalion from ${name(src)}`:'No battalion can be spared',dis:!src,go:()=>{N(src).T-=1;S.flags.okaforAt=S.turn+3;S.flags.okafor='escorted';log(`A battalion from ${name(src)} escorts Dr Okafor’s team west.`,'key');}},
-      {label:'Refuse. Every rifle is needed.',go:()=>{S.flags.okafor='refused';log('Dr Okafor’s team stays at St Brennan’s.');}}];}},
+      {label:src?`Send a battalion from ${name(src)}`:'No battalion can be spared',sub:'Lose 1 battalion for good. Treatment in 3 turns.',dis:!src,go:()=>{N(src).T-=1;S.flags.okaforAt=S.turn+3;S.flags.okafor='escorted';log(`A battalion from ${name(src)} escorts Dr Okafor’s team west.`,'key');}},
+      {label:'Fly them out by helicopter',sub:S.sorties>=2?'Uses 2 of your air sorties. Treatment in 3 turns.':`Needs 2 air sorties, you have ${S.sorties}`,dis:S.sorties<2,go:()=>{S.sorties-=2;S.flags.okaforAt=S.turn+3;S.flags.okafor='flown';log('Helicopters lift Dr Okafor’s team and samples out of St Brennan’s.','key');}},
+      {label:'Refuse. Every rifle is needed.',sub:'Her team stays at the hospital, for now.',go:()=>{S.flags.okafor='refused';log('Dr Okafor’s team stays at St Brennan’s.');}}];}},
+  // the refusal comes back when the hospital is about to go
+  {id:'okafor_siege',turn:0,when:()=>S.flags.okafor==='refused'&&S.origin!=='brennan'&&(state('brennan')==='losing'||fallen('brennan')),eyebrow:'Decision',title:'The last broadcast from St Brennan’s',
+    body:()=>`St Brennan’s is being overrun. Dr Okafor and four of her team have barricaded themselves on the hospital roof with what is left of the samples. She says the work can still be finished, but it will be slower now: four turns, not three. A helicopter can reach the roof. It may not come back.`,
+    choices:()=>[
+      {label:'Send the helicopter',sub:S.sorties>=1?'Uses 1 air sortie. Half the time it gets through: treatment in 4 turns. Confidence +3 either way.':'No air sorties left',dis:S.sorties<1,go:()=>{S.sorties--;morale(2,3);if(rng()<.5){S.flags.okaforAt=S.turn+4;S.flags.okafor='rescued';log('The helicopter lifts Dr Okafor off the roof of St Brennan’s.','good');}else{S.flags.okafor='lost';log('The rescue helicopter went down over St Brennan’s. There were no survivors.','bad');moment('Dr Okafor’s team was lost with the rescue helicopter.',30);}}},
+      {label:'Tell her we can’t reach her',sub:'Confidence −4. The treatment is lost.',go:()=>{S.flags.okafor='lost';morale(-2,-4);log('St Brennan’s goes silent. Dr Okafor’s work is lost.','bad');moment('Dr Okafor was left on the roof of St Brennan’s.',30);}}]},
   {id:'cure',turn:0,when:()=>S.flags.okaforAt&&S.turn>=S.flags.okaforAt&&!fallen('westhaven'),eyebrow:'Good news',title:'A breakthrough',
     body:()=>'Dr Okafor’s team has a working treatment for the bitten. Field hospitals can now save nearly half of the people who would have turned.',
     choices:()=>[{label:'Get it to every unit.',go:()=>{S.flags.cure=1;morale(5,8);log('The infection spreads more slowly everywhere from now on.','good');}}]},
@@ -757,6 +783,12 @@ const EVENTS=[
     choices:()=>[
       {label:'Requisition the fuel',sub:'+40 supply. Evacuations move half as many people for 4 turns, and public order falls.',go:()=>{S.supply+=40;S.flags.panic=S.turn+4;morale(-12,0);log('Fuel requisitioned. There are riots at the pumps.','key');}},
       {label:'Ration the army instead',sub:'Rail moves cost 2 orders for the rest of the war',go:()=>{S.flags.ration=1;log('The army goes on fuel rations.','key');}}]},
+  {id:'blackout',turn:7,eyebrow:'Decision',title:'The grid is failing',
+    body:()=>'The power stations are running on skeleton crews and the grid is coming apart. The engineers can keep one thing lit through the nights ahead: the evacuation routes, the floodlights on the line, or the field hospitals. Whatever you choose, the rest goes dark.',
+    choices:()=>[
+      {label:'Light the roads to the ports',sub:'Refugee columns no longer suffer worse losses at night. Public order +2.',go:()=>{S.flags.roadlights=1;S.flags.grid='roads';morale(2,0);log('The evacuation routes stay lit through the night.','key');}},
+      {label:'Floodlight the line',sub:'Unfortified garrisons no longer fight worse at night.',go:()=>{S.flags.floodlights=1;S.flags.grid='line';log('Floodlights go up along the front. The nights belong to us now.','key');}},
+      {label:'Power the field hospitals',sub:'Fewer of the bitten turn: infection spreads 15% slower. Public order +4.',go:()=>{S.flags.hospitals=1;S.flags.grid='hospitals';morale(4,0);log('The field hospitals keep their lights and their ventilators.','key');}}]},
   {id:'promise_evac',turn:9,when:()=>!!promisePlace(id=>N(id).pop>=15&&!N(id).evac),eyebrow:'A request',title:()=>`Get ${name(UI._pe=promisePlace(id=>N(id).pop>=15&&!N(id).evac))} out`,
     body:()=>{const id=UI._pe||promisePlace(id=>N(id).pop>=15);return `The bishop of ${name(id)} has ${kp(N(id).pop)} people sheltering in churches and schools. He asks for your word that every one of them will be on the road to a port by ${when(S.turn+6)}.`;},
     choices:()=>{const id=promisePlace(id=>N(id).pop>=15&&!N(id).evac);return [
@@ -778,8 +810,8 @@ const EVENTS=[
   {id:'torrin',turn:15,when:()=>N('torrin').T>=1&&!fallen('torrin')&&!fallen('calder'),eyebrow:'Decision',title:'Camp Torrin asks to fall back',
     body:()=>`Colonel Varga at Camp Torrin has ${bn(N('torrin').T)} battalions left and says the base cannot hold much longer. He wants to fall back on Port Calder and hold the harbour for the last ships.`,
     choices:()=>[
-      {label:'Fall back to Port Calder',sub:'Torrin’s garrison joins Calder, and Calder gains a level of fortification',go:()=>{N('calder').T+=N('torrin').T;N('torrin').T=0;N('calder').F=Math.min(3,N('calder').F+1);S.flags.varga='fellback';log('Camp Torrin is abandoned. Its garrison digs in at Port Calder.','key');}},
-      {label:'Hold Torrin. Every day counts.',sub:'Torrin gains a level of fortification and 2 battalions from its reserve',go:()=>{N('torrin').F=Math.min(3,N('torrin').F+1);N('torrin').T+=2;S.flags.varga='held';log('Camp Torrin will hold. Varga arms his reserve and the engineers throw up another wall.','key');}}]},
+      {label:'Fall back to Port Calder',sub:'Torrin’s garrison joins Calder, and Calder gains a level of fortification',go:()=>{addT('calder',N('torrin').T,N('torrin').V||0);N('torrin').T=0;N('torrin').V=0;N('calder').F=Math.min(3,N('calder').F+1);S.flags.varga='fellback';log('Camp Torrin is abandoned. Its garrison digs in at Port Calder.','key');}},
+      {label:'Hold Torrin. Every day counts.',sub:'Torrin gains a level of fortification and 2 battalions from its reserve',go:()=>{N('torrin').F=Math.min(3,N('torrin').F+1);addT('torrin',2);S.flags.varga='held';log('Camp Torrin will hold. Varga arms his reserve and the engineers throw up another wall.','key');}}]},
   // The march resolves in the endTurn of S.turn+1, so it is felt on when(S.turn+2). It can first qualify after turn 16, so schedule
   // it from the turn it fires (a fixed turn 17 left late marches in the past: they never happened and the countdown went negative).
   {id:'march',turn:16,when:()=>{const s=biggestHorde();return S.turn<=TURNS-2&&s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
@@ -926,7 +958,7 @@ function nodeLabel(id,st,targets,cutTo){
   bits.push(`${p.name}, ${TYPE_LABEL[p.type]}, ${STATE_LABEL[st]}`);
   bits.push(d.pop>=.5?`${kp(d.pop)} civilians`:'no civilians');
   if(d.H>=.5)bits.push(`${kp(d.H)} infected`);
-  if(d.T>=.05)bits.push(`${bn(d.T)} battalion${bn(d.T)==='1'?'':'s'}`);
+  if(d.T>=.05)bits.push(`${bn(d.T)} ${vetName(d).toLowerCase()} battalion${bn(d.T)==='1'?'':'s'}`);
   if(d.F)bits.push(`fortified ${d.F}/3`);
   if(P[id].type==='port'&&d.queue>=.5)bits.push(`${kp(d.queue)} on the quay`);
   if(d.evac)bits.push('evacuating');
@@ -1001,7 +1033,7 @@ function placePanel(id){
   const btn=(act,label,small,reason,extra='')=>`<button class="btn${extra}" data-act="${act}" ${reason?'disabled':''}>${label}${reason?`<small class="why">${esc(reason)}</small>`:`<small>${small}</small>`}</button>`;
   if(n.T>=.05){
     const mWhy=why(noCp(1),[!nT,'No open road or railway out of here']);
-    orders+=`<div class="sec"><p class="label">Move troops</p><div class="amts">${amts.map(a=>`<button class="btn" data-act="move" data-amt="${a}" ${mWhy?'disabled':''}>${a} bn</button>`).join('')}${n.T-Math.floor(n.T)>.05?`<button class="btn" data-act="move" data-amt="${n.T}" ${mWhy?'disabled':''}>All ${bn(n.T)}</button>`:''}</div>${mWhy?`<p class="note"><b class="bad">Can’t move: ${esc(mWhy.toLowerCase())}.</b></p>`:''}<p class="note">A road move costs 1 order. Rail moves cost ${S.flags.ration?'2 orders (fuel rationing)':'1 order'} and reach any station along track that isn’t infected.</p></div>`;
+    orders+=`<div class="sec"><p class="label">Move troops</p><div class="amts">${amts.map(a=>`<button class="btn" data-act="move" data-amt="${a}" ${mWhy?'disabled':''}>${a} bn</button>`).join('')}${n.T-Math.floor(n.T)>.05?`<button class="btn" data-act="move" data-amt="${n.T}" ${mWhy?'disabled':''}>All ${bn(n.T)}</button>`:''}</div>${mWhy?`<p class="note"><b class="bad">Can’t move: ${esc(mWhy.toLowerCase())}.</b></p>`:''}${`<p class="note">This garrison is ${vetName(n).toLowerCase()}${(n.V||0)>=.05?` (+${Math.round(12*(n.V||0))}% killing power)`:''}. Troops carry their experience with them; fresh troops dilute it.</p>`}<p class="note">A road move costs 1 order. Rail moves cost ${S.flags.ration?'2 orders (fuel rationing)':'1 order'} and reach any station along track that isn’t infected.</p></div>`;
   }
   const ev=n.evac;
   orders+=`<div class="sec"><p class="label">Orders</p>${n.pop>=1||ev?`<p class="note">${esc(evacPreview(id))}</p>`:''}<div class="orders">
@@ -1009,7 +1041,8 @@ function placePanel(id){
     ${btn('fortify','Fortify',`1 order · 8 supply · level ${n.F}/3`,why([n.F>=3,'Fully fortified (3/3)'],[n.H>=.5,'Not while infected'],noCp(1),[S.supply<8,`Needs 8 supply, you have ${Math.round(S.supply)}`]))}
     ${btn('airdrop','Air-drop supplies',`1 order · 10 supply · ${net.has(id)?'not needed here':'keeps a cut-off garrison fighting'}`,why(noCp(1),[S.supply<10,`Needs 10 supply, you have ${Math.round(S.supply)}`]))}
     ${btn('militia','Raise militia','1 order · 10k civilians → 1 bn · order −2',why([fallen(id),'This place has fallen'],[n.pop<15,'Needs at least 15k civilians here'],noCp(1)))}
-    ${btn('strike','Air strike',`2 orders · kills up to 20k infected and ${kp(n.pop*.15)} civilians`,why([n.H<.5,'No infected here to strike'],[S.sorties<1,'No air sorties left'],noCp(2)))}
+    ${btn('strike','Air strike',`2 orders · 1 sortie · kills up to 20k infected and ${kp(n.pop*.15)} civilians`,why([n.H<.5,'No infected here to strike'],[S.sorties<1,'No air sorties left'],noCp(2)))}
+    ${p.type==='port'?'':btn('airlift','Helicopter airlift',`1 order · 1 sortie · flies ${kp(Math.min(n.pop,LIFT))} to the quay at ${liftPort()?name(liftPort()):'a port'}`,why([fallen(id),'This place has fallen'],[n.pop<1,'No civilians left here'],[!liftPort(),'No open port to land at'],[S.sorties<1,'No air sorties left'],noCp(1)))}
     ${btn('cut','Blow a road or bridge',`1 order · permanent · ${cutsLeft()} left this turn`,why([!nbrs(id).length,'No open roads left out of here'],[cutsLeft()<1,'Already blew 2 this turn (the limit)'],noCp(1)))}
   </div></div>`;
   return `<div class="sec place"><div class="row"><div class="kind"><span class="label">${TYPE_LABEL[p.type]}</span><span class="state ${st}">${STATE_LABEL[st]}</span>${n.evac?'<span class="state evac">Evacuating</span>':''}</div><button class="btn" data-act="deselect">Close</button></div>
@@ -1018,6 +1051,7 @@ function placePanel(id){
       <div><b>${kp(n.pop)}</b><span>Civilians</span></div>
       <div><b class="${n.H>=.5?'bad':''}">${kp(n.H)}</b><span>Infected</span></div>
       <div><b>${bn(n.T)}</b><span>Battalions</span></div>
+      ${n.T>=.05?`<div><b style="font-size:14px">${vetName(n)}</b><span>Experience</span></div>`:''}
       <div><b>${n.F}/3</b><span>Fortified</span></div>
       <div><b class="${supTxt.startsWith('Cut')||supTxt==='Short'?'bad':''}" style="font-size:14px">${supTxt}</b><span>Supply</span></div>
       ${p.type==='port'?`<div><b class="good">${kp(n.queue)}</b><span>On the quay</span></div><div><b>${capOf(id)}k</b><span>Ships / turn</span></div>`:''}
@@ -1046,7 +1080,8 @@ function situation(){
   rows.sort((a,b)=>order[a.st]-order[b.st]||b.inc-a.inc||b.n.H-a.n.H||b.n.pop-a.n.pop);
   const onRoad=S.cols.reduce((a,c)=>a+c.count,0);
   const prom=S.promises.filter(p=>!p.done);
-  return `<div class="sec"><p class="label">Situation</p>
+  const nightTxt=isNight()?`Night falls when you end this turn: hordes travel further${S.flags.floodlights?'':', unfortified garrisons below veteran fight at 85%'}${S.flags.roadlights?'':' and refugee columns caught on the road lose more'}.`:'Daylight: hordes move more slowly this turn. Night follows.';
+  return `<div class="sec"><p class="label">Situation</p><p class="callout${isNight()?' bad':''}">${esc(nightTxt)}</p>
     <div class="sitlist">${rows.filter(r=>['losing','holding','threat'].includes(r.st)).map(r=>`<button data-act="select" data-id="${r.id}"><span>${esc(name(r.id))}${S.nextSpark&&S.nextSpark.id===r.id?' <span class="bad">!</span>':''}</span><em class="${r.st==='losing'||r.st==='fallen'?'bad':''}">${STATE_LABEL[r.st]}${r.n.H>=.5?' · '+kp(r.n.H):''}${r.inc>=.8?' · ~'+kp(r.inc)+' incoming':''} · ${bn(r.n.T)} bn</em></button>`).join('')||'<p class="note">No threats.</p>'}</div>
     ${rows.some(r=>r.st==='fallen')?`<p class="note"><b class="bad">Fallen:</b> ${rows.filter(r=>r.st==='fallen').map(r=>esc(name(r.id))).join(', ')}.</p>`:''}
     ${S.nextSpark&&!['losing','holding','threat'].includes(state(S.nextSpark.id))?`<p class="callout bad">Infected travellers sighted near ${esc(name(S.nextSpark.id))}.</p>`:''}
@@ -1074,6 +1109,9 @@ const HELP=`<dl class="helpgrid">
   <dt>bn</dt><dd>Battalions. Each kills about 2 thousand infected a turn when supplied, more when fortified.</dd>
   <dt>Arrows</dt><dd>Red arrows show where hordes will move when you end the turn. A “!” marks a place where infected travellers will start a new outbreak.</dd>
   <dt>Roads</dt><dd>Hordes, refugees and supply all move along open roads. Blowing a road is how you hold a line, but it traps your own people too.</dd>
+  <dt>Night</dt><dd>Every second turn is a night. At night hordes spill further along the roads, unfortified garrisons that are not yet veterans fight at 85%, and refugee columns caught by infected suffer more. By day hordes move more slowly. The forecast arrows already allow for it.</dd>
+  <dt>Experience</dt><dd>Garrisons that kill infected gain experience: green, blooded, veteran, elite. Each level adds 12% killing power and cuts their own losses; veterans and better ignore the night penalty. Troops carry their experience when they move, and fresh troops, militia and reinforcements dilute it. The army bases start blooded.</dd>
+  <dt>Sorties</dt><dd>Five air sorties for the whole campaign, shared by air strikes (2 orders, kills infected and some civilians) and helicopter airlifts (1 order, flies up to 6k civilians from a place that isn’t a port onto the least crowded open quay). An airlift is the only way out for a town cut off from every port.</dd>
   <dt>Supply</dt><dd>Only reaches places with an unbroken route to Aldermoor. Cut-off garrisons weaken every turn unless you air-drop supplies.</dd>
   <dt>Gauges</dt><dd>Public order below 35 slows evacuations. Confidence of 80 or more earns an extra order each turn; below 30 costs you one; at 0 you are relieved of command. Keeping promises is the surest way to raise it.</dd>
   <dt>Keys</dt><dd>E ends the turn, U undoes your last order, Esc cancels or closes, + and − zoom the map. On the map, arrow keys move between places and Enter selects one; while moving troops or blowing a road, Tab steps through the places you can pick. In a dialog, arrow keys step through its buttons.</dd>
@@ -1397,6 +1435,7 @@ document.addEventListener('click',e=>{
     case 'airdrop':if(id)orderAirdrop(id);break;
     case 'militia':if(id)orderMilitia(id);break;
     case 'strike':if(id)orderStrike(id);break;
+    case 'airlift':if(id)orderAirlift(id);break;
   }
   render();
 });
