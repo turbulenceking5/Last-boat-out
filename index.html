@@ -138,10 +138,20 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
 .node.losing .disc{fill:#d0532c}
 .node.fallen .disc{fill:#24231f}
 .node.cleared .disc{fill:#9a9686}
-.node .horde{fill:var(--blood);fill-opacity:.16;stroke:var(--blood);stroke-width:2}
+.node .horde{fill:var(--blood);fill-opacity:.16;stroke:var(--blood);stroke-width:1.6;stroke-opacity:.8}
+/* zombie figures: one per slice of the horde, shambling in place; marchers walk the forecast arrows */
+.zed{fill:#5a1a10;stroke:var(--paper);stroke-width:1.1;paint-order:stroke;stroke-linejoin:round;transform-box:fill-box;transform-origin:50% 100%;animation:shamble 1.7s ease-in-out infinite alternate}
+@keyframes shamble{from{transform:rotate(-7deg)}to{transform:rotate(6deg)}}
+.marcher{animation:march 3.2s linear infinite}
+@keyframes march{0%{transform:translate(0,0);opacity:0}15%,80%{opacity:1}100%{transform:translate(var(--dx),var(--dy));opacity:0}}
+.marcher .zed{animation-duration:.8s}
+.trooper{fill:var(--troop);stroke:var(--paper);stroke-width:1.1;paint-order:stroke;stroke-linejoin:round}
+.node .badge .trooper{fill:#e9eef3;stroke:none}
+.deploy{animation:deploy var(--t) ease-in-out forwards}
+@keyframes deploy{0%{transform:translate(0,0);opacity:0}12%,85%{opacity:1}100%{transform:translate(var(--dx),var(--dy));opacity:0}}
+.deploy .trooper{transform-box:fill-box;transform-origin:50% 100%;animation:step .35s ease-in-out infinite alternate}
+@keyframes step{from{transform:rotate(-5deg)}to{transform:rotate(5deg)}}
 .node.losing .horde{animation:pulse 2s ease-in-out infinite;animation-delay:var(--ph,0s)}
-.node .shamble{fill:none;stroke:#6e1508;stroke-width:3.2;stroke-linecap:round;transform-box:view-box;animation:circle 60s linear infinite;animation-delay:var(--ph,0s)}
-.node.losing .shamble{stroke:#8e1c0c}
 .node .disc{transition:stroke-width .15s}
 .node .shade{fill:none;stroke:#fff;stroke-opacity:.35;stroke-width:1.2;stroke-dasharray:0 1.2 2.4 6;pointer-events:none}
 .node.fallen .shade,.node.losing .shade{stroke-opacity:.12}
@@ -286,8 +296,8 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
   .check{min-height:44px}
   .check input{width:22px;height:22px}
 }
-@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
-@media (prefers-reduced-motion:reduce){.map *,.top *,.ticker *{animation:none!important}.node .smoke{fill-opacity:.25}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}.zed,.marcher,.deploy .trooper{animation:none!important}.deploy{animation:none!important;opacity:0}}
+@media (prefers-reduced-motion:reduce){.map *:not(.deploy),.top *,.ticker *{animation:none!important}.node .smoke{fill-opacity:.25}}
 
 /* after-action report and service record (end screen, setup record) */
 :root{--aar-saved:#4d9cc9;--aar-lost:#e0703f;--aar-stranded:#7d8580}
@@ -361,6 +371,53 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
   .aar-pct b{font-size:34px}
   .aar-ledger{grid-template-columns:minmax(0,1fr)}
 }
+/* ---------- feel: press states, end-turn pulse, turn feedback, first-time tips ---------- */
+.btn:active:not(:disabled),.sitlist button:active{transform:translateY(1px);filter:brightness(1.18)}
+.endturn{transition:filter .15s,box-shadow .2s}
+.endturn:hover{filter:brightness(1.08)}
+.endturn:active{transform:translateY(1px);filter:brightness(.9)}
+.endturn.feel-ready{animation:feel-ready 1.6s ease-in-out infinite}
+@keyframes feel-ready{0%,100%{box-shadow:0 0 0 0 rgba(226,162,58,.6)}50%{box-shadow:0 0 0 8px rgba(226,162,58,0)}}
+.feel-mute{display:inline-flex;align-items:center;justify-content:center}
+.feel-mute svg{width:18px;height:18px;display:block}
+.feel-mute[aria-pressed="false"]{color:var(--muted)}
+#feelfx{pointer-events:none}
+.feel-float{font:700 15px var(--font-num);paint-order:stroke;stroke:var(--paper);stroke-width:4;stroke-linejoin:round;fill:var(--map-ink);opacity:0;animation:feel-float 3s ease-out forwards}
+.feel-float.good{fill:#2f6a1f}.feel-float.bad{fill:#a3301f}
+@keyframes feel-float{0%{opacity:0;transform:translateY(8px)}12%{opacity:1;transform:translateY(0)}75%{opacity:1}100%{opacity:0;transform:translateY(-22px)}}
+.feel-ring{fill:none;stroke:var(--blood);stroke-width:3;opacity:0;transform-origin:0 0;animation:feel-ring 1.3s ease-out 2}
+@keyframes feel-ring{0%{opacity:.9;transform:scale(1)}100%{opacity:0;transform:scale(2.6)}}
+.node.feel-shake .disc{animation:feel-shake .45s ease-in-out .15s 2}
+@keyframes feel-shake{0%,100%{transform:translate(0,0)}20%{transform:translate(-3px,1px)}40%{transform:translate(3px,-1px)}60%{transform:translate(-2px,0)}80%{transform:translate(2px,1px)}}
+.feel-curtain{position:fixed;inset:0;z-index:45;pointer-events:none;display:flex;align-items:center;justify-content:center;background:rgba(6,8,10,.55);opacity:0;visibility:hidden}
+.feel-curtain.on{visibility:visible;animation:feel-curtain 1.4s ease-in-out forwards}
+.feel-curtain p{margin:0;text-align:center;font:30px/1.2 var(--font-display);color:var(--ink);text-shadow:0 2px 14px #000}
+.feel-curtain span{display:block;font:600 13px var(--font-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin-top:6px}
+@keyframes feel-curtain{0%{opacity:0}20%,60%{opacity:1}100%{opacity:0}}
+.feel-toast{position:fixed;left:50%;top:14px;transform:translate(-50%,-12px);z-index:46;pointer-events:none;display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:center;width:max-content;max-width:calc(100vw - 32px);background:rgba(28,35,38,.96);border:1px solid var(--amber);border-radius:6px;padding:8px 12px;box-shadow:0 10px 30px rgba(0,0,0,.5);opacity:0;visibility:hidden;transition:opacity .3s,transform .3s,visibility 0s .3s}
+.feel-toast.on{opacity:1;visibility:visible;transform:translate(-50%,0);transition:opacity .3s,transform .3s}
+.feel-when{font:600 11px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-right:4px}
+.feel-chip{font:600 13px var(--font-num);padding:2px 8px;border-radius:3px;background:rgba(0,0,0,.3)}
+.feel-chip.good{color:var(--good)}.feel-chip.bad{color:#ec9a8b}
+.feel-hint{position:fixed;left:16px;bottom:16px;z-index:38;width:min(340px,calc(100vw - 32px));background:var(--panel-2);border:1px solid var(--amber);border-left-width:4px;border-radius:6px;padding:10px 12px;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.feel-hint.phone{top:calc(8px + env(safe-area-inset-top,0px));bottom:auto;left:16px}
+.feel-hint p{margin:0}
+.feel-hint .feel-hint-n{font:600 11px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.feel-hint .feel-hint-t{margin:4px 0 8px;font-size:14px;line-height:1.35}
+.feel-hint-b{display:flex;gap:6px}
+.feel-tipped:not(.node){outline:2px dashed var(--amber);outline-offset:3px}
+.node.feel-tipped .focusring{stroke:var(--amber);stroke-width:2.5;stroke-dasharray:5 4;animation:feel-tip 1.4s ease-in-out infinite}
+@keyframes feel-tip{50%{opacity:.3}}
+@keyframes feel-fade{0%,100%{opacity:0}15%,70%{opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  .endturn.feel-ready{animation:none;box-shadow:0 0 0 3px rgba(226,162,58,.65)}
+  .btn:active:not(:disabled),.sitlist button:active,.endturn:active{transform:none}
+  .feel-float{animation:feel-fade 3s linear forwards}
+  .feel-ring{animation:feel-fade 1.6s linear forwards}
+  .node.feel-shake .disc,.node.feel-tipped .focusring{animation:none}
+  .feel-curtain.on{animation:feel-fade 1.1s linear forwards}
+  .feel-toast,.feel-toast.on{transform:translate(-50%,0)}
+}
 </style>
 <style>[hidden]{display:none!important}body{margin:0}:root{padding-top:env(safe-area-inset-top,0px)}</style>
 </head>
@@ -375,6 +432,8 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
         <svg class="map" id="map" viewBox="0 0 1000 700" role="group" aria-label="Operations map of Vessmark. Arrow keys move between places; Enter selects.">
           <defs>
             <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
+            <path id="zed" d="M2.6 -10.4a1.6 1.6 0 1 0 -3.2 0a1.6 1.6 0 1 0 3.2 0zM-1.3 -8.4L1.5 -8.7L1.3 -4L-1.3 -4zM.6 -8.3L5.4 -7.6L5.3 -6.5L.6 -6.9zM0 -7.3L4.8 -5.8L4.5 -4.8L0 -5.9zM-1.3 -4.2L-2.8 0L-1.5 0L.1 -3.4zM.3 -4.2L1.9 0L3.2 0L1.4 -4.2z"/>
+            <path id="trooper" d="M-2.3 -9.3Q-2.1 -12.3 0 -12.3Q2.1 -12.3 2.3 -9.3L2.8 -9.1L-2.8 -9.1zM1.3 -8.4a1.3 1.3 0 1 0 -2.6 0a1.3 1.3 0 1 0 2.6 0zM-1.7 -7L1.7 -7L1.5 -3.4L-1.5 -3.4zM-1.5 -3.6L-1.9 0L-.5 0L0 -2.8L.5 0L1.9 0L1.5 -3.6zM.9 -6.4L4.3 -11.7L4.9 -11.3L1.5 -6z"/>
             <marker id="carr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z"/></marker>
             <radialGradient id="g-heat"><stop offset="0" stop-color="#e0401f" stop-opacity=".8"/><stop offset=".4" stop-color="#c4432f" stop-opacity=".42"/><stop offset="1" stop-color="#9e2414" stop-opacity="0"/></radialGradient>
             <radialGradient id="g-light"><stop offset="0" stop-color="#ffe2a0" stop-opacity=".95"/><stop offset=".3" stop-color="#ffc35a" stop-opacity=".45"/><stop offset="1" stop-color="#ffb347" stop-opacity="0"/></radialGradient>
@@ -392,9 +451,9 @@ svg.map{display:block;height:auto;touch-action:manipulation;background:var(--sea
         <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#d0532c" stroke="#555"/></svg>Infected, losing</span>
         <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#24231f" stroke="#555"/></svg>Fallen</span>
         <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="5.5" fill="#9a9686" stroke="#555"/></svg>Empty</span>
-        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="6" fill="rgba(196,67,47,.25)" stroke="#c4432f" stroke-width="1.5"/></svg>Horde (size)</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="6" fill="rgba(196,67,47,.25)" stroke="#c4432f" stroke-width="1.5"/><use href="#zed" transform="translate(8 13) scale(.9)" fill="#5a1a10"/></svg>Horde (size)</span>
         <span><svg aria-hidden="true" viewBox="0 0 18 14"><line x1="1" y1="7" x2="13" y2="7" stroke="#a3301f" stroke-width="2.5"/><path d="M12 3 L17 7 L12 11 z" fill="#a3301f"/></svg>Horde moving next turn</span>
-        <span><svg aria-hidden="true" viewBox="0 0 18 14"><rect x="2" y="2" width="14" height="10" rx="1.5" fill="#3d5a78"/></svg>Battalions</span>
+        <span><svg aria-hidden="true" viewBox="0 0 18 14"><rect x="1" y="1" width="16" height="12" rx="1.5" fill="#3d5a78"/><use href="#trooper" transform="translate(8 12.6) scale(.85)" fill="#e9eef3"/></svg>Battalions</span>
         <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="9" cy="7" r="4" fill="#8fb27a" stroke="#2c3a24"/></svg>Evacuating</span>
         <span><svg aria-hidden="true" viewBox="0 0 18 14"><circle cx="6" cy="7" r="4" fill="#fff" stroke="#2c3a24"/><path d="M11 3 L17 7 L11 11 z" fill="#2c3a24"/></svg>Refugee column</span>
         <span><svg aria-hidden="true" viewBox="0 0 18 14"><rect x="4" y="2" width="10" height="10" transform="rotate(45 9 7)" fill="none" stroke="#bbb" stroke-width="1.5"/></svg>Port</span>
@@ -461,6 +520,14 @@ const bn=v=>v<.05?'0':v<1?String(Math.round(v*10)/10):String(Math.round(v));
 function mulberry(a){return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;}}
 let rng=Math.random;
 const when=t=>`Day ${Math.floor(t/2)+1} · ${t%2?'Night':'Morning'}`;
+// Night: the 12 hours resolved from an odd turn. Hordes travel further, unlit garrisons fight worse, columns caught on the road suffer more.
+const nightOf=t=>t%2===1;
+const isNight=()=>nightOf(S.turn);
+const NIGHT={spill:1.15,day:.85,fight:.85,cols:1.3};
+// Veterancy: 0 green .. 3 elite. Each level adds 12% to a garrison's killing power and cuts its losses.
+const VET_NAMES=['Green','Blooded','Veteran','Elite'];
+const vetLvl=n=>Math.floor((n.V||0)+1e-9);
+const vetName=n=>VET_NAMES[Math.min(3,vetLvl(n))];
 const isRail=(a,b)=>E.some(e=>e[2]&&((e[0]===a&&e[1]===b)||(e[0]===b&&e[1]===a)));
 const open=(a,b)=>!S.cut.includes(ek(a,b));
 const nbrs=a=>E.filter(e=>e[0]===a||e[1]===a).map(e=>e[0]===a?e[1]:e[0]).filter(b=>open(a,b));
@@ -477,14 +544,14 @@ function newGame(opts={}){
   const seed=Number.isFinite(opts.seed)?opts.seed:Math.floor(Math.random()*1e9);
   rng=mulberry(seed);const D=DIFFS[diff];
   const nodes={};
-  for(const [id,p] of Object.entries(P))nodes[id]={pop:p.pop,H:0,T:p.T||0,F:0,stock:0,evac:false,evacT:-1,queue:0,sup:1,oos:0,wasFallen:false};
+  for(const [id,p] of Object.entries(P))nodes[id]={pop:p.pop,H:0,T:p.T||0,V:p.type==='base'?1:0,F:0,stock:0,evac:false,evacT:-1,queue:0,sup:1,oos:0,wasFallen:false};
   let origin='kessler',cut=[],caps={},shift={};
   if(scenario==='random'){
     origin=ORIGINS[Math.floor(rng()*ORIGINS.length)];
     for(const id of PORTS)caps[id]=Math.round(P[id].cap*(.75+rng()*.5));
     const cand=E.filter(e=>!e.includes('aldermoor')&&!PORTS.some(p=>e.includes(p))&&!e.includes(origin));
     for(let i=0;i<2;i++){const e=cand.splice(Math.floor(rng()*cand.length),1)[0];cut.push(ek(e[0],e[1]));}
-    for(const id of ['okafor','fuel','recall','navy','promise_hold','promise_evac','torrin'])shift[id]=Math.floor(rng()*3)-1;
+    for(const id of ['okafor','fuel','blackout','recall','navy','promise_hold','promise_evac','torrin'])shift[id]=Math.floor(rng()*3)-1;
   } else for(const id of PORTS)caps[id]=P[id].cap;
   for(const id of PORTS)caps[id]=Math.round(caps[id]*D.ships);
   const o=nodes[origin];o.H=origin==='kessler'?95+Math.round(rng()*20):Math.round(P[origin].pop*.9+15+rng()*10);
@@ -507,7 +574,10 @@ function morale(dOrder,dConf){S.order=clamp(S.order+dOrder,0,100);S.conf=clamp(S
 
 /* ---------- reading the situation ---------- */
 const N=id=>S.nodes[id];
-const defence=id=>{const n=N(id);return n.T*2.2*(n.sup??1)*(1+.5*n.F);};
+const nightFight=n=>isNight()&&!n.F&&!S.flags.floodlights&&vetLvl(n)<2?NIGHT.fight:1;
+const defence=id=>{const n=N(id);return n.T*2.2*(n.sup??1)*(1+.5*n.F)*(1+.12*(n.V||0))*nightFight(n);};
+// adds battalions to a place; their experience mixes in proportion to numbers
+function addT(id,amt,v=0){const n=N(id),t=n.T+amt;n.V=t>.05?((n.V||0)*Math.max(0,n.T)+v*amt)/t:0;n.T=t;}
 const fallen=id=>{const n=N(id),alive=n.pop+n.queue;return n.H>=.5&&n.T<.3&&(alive<1||n.H>=alive*3);};
 const held=id=>{const n=N(id);return n.H<.5||defence(id)>=n.H;};
 function state(id){
@@ -558,7 +628,7 @@ function plan(){
     if(cand.length){S.nextSpark={id:pickW(cand,cand.map(id=>Math.sqrt(N(id).pop))),size:(1.5+lvl*.8+rng()*2)*DIFFS[S.diff].spark};log(`Infected travellers sighted near ${name(S.nextSpark.id)}. Expect cases there next turn.`,'bad');}
   }
 }
-function spillOut(id,Hafter){const n=N(id);return Hafter*(n.pop+n.queue<1?.32:.13)*(S.intent[id]??1);}
+function spillOut(id,Hafter){const n=N(id);return Hafter*(n.pop+n.queue<1?.32:.13)*(S.intent[id]??1)*(isNight()?NIGHT.spill:NIGHT.day);}
 function flows(){
   const out=[];
   for(const id in P){const n=N(id);if(n.H<1)continue;
@@ -576,7 +646,7 @@ function snapshot(){UI.undo.push(JSON.stringify(S));if(UI.undo.length>30)UI.undo
 function spend(c){if(S.cp<c)return false;snapshot();S.cp-=c;return true;}
 function orderMove(from,to,amt){
   const c=moveCost(from,to);if(!moveTargets(from).has(to)||amt<=0||N(from).T<amt-1e-9||!spend(c))return;
-  N(from).T-=amt;N(to).T+=amt;if(N(from).T<.05)N(from).T=0;
+  N(from).T-=amt;addT(to,amt,N(from).V||0);if(N(from).T<.05){N(from).T=0;N(from).V=0;}
   log(`${bn(amt)} battalion${amt===1?'':'s'} ${nbrs(from).includes(to)?(amt===1?'marches':'march'):(amt===1?'goes by rail':'go by rail')} from ${name(from)} to ${name(to)}.`);
 }
 function orderAirdrop(id){if(S.supply<10||!spend(1))return;S.supply-=10;N(id).stock+=10;log(`Air drop: 10 supply to ${name(id)}.`);}
@@ -586,11 +656,17 @@ function orderEvac(id){
   if(n.evac){snapshot();n.evac=false;if(n.evacT===S.turn){S.cp++;n.evacT=-1;}log(`Evacuation of ${name(id)} halted.`);return;}
   if(fallen(id)||n.pop<1||!spend(1))return;n.evac=true;n.evacT=S.turn;log(`Evacuation ordered for ${name(id)}.`,'key');
 }
-function orderMilitia(id){const n=N(id);if(n.pop<15||fallen(id)||!spend(1))return;n.pop-=10;n.T+=1;S.mobilized+=10;morale(-2,0);log(`${name(id)} raises a militia battalion from 10k volunteers.`);}
+function orderMilitia(id){const n=N(id);if(n.pop<15||fallen(id)||!spend(1))return;n.pop-=10;addT(id,1);S.mobilized+=10;morale(-2,0);log(`${name(id)} raises a militia battalion from 10k volunteers.`);}
 function orderStrike(id){const n=N(id);if(S.sorties<1||n.H<.5||!spend(2))return;S.sorties--;
   const kh=Math.min(n.H*.6,20),kc=n.pop*.15;n.H-=kh;n.pop-=kc;S.lost+=kc;S.strikeKilled+=kc;
   if(kc>=1){morale(-5,-2);moment(`Our own air strike killed ${kp(kc)} civilians in ${name(id)}.`,kc);}
   log(`Air strike on ${name(id)}: about ${kp(kh)} infected destroyed.${kc>=.5?` ${kp(kc)} civilians died with them.`:''}`,'bad');}
+// Airlift: one helicopter sortie flies up to LIFT k civilians onto the least crowded open quay.
+const LIFT=6;
+function liftPort(){return PORTS.filter(portOpen).sort((a,b)=>N(a).queue/Math.max(1,capOf(a))-N(b).queue/Math.max(1,capOf(b)))[0];}
+function orderAirlift(id){const n=N(id),to=liftPort();if(S.sorties<1||fallen(id)||n.pop<1||P[id].type==='port'||!to||!spend(1))return;
+  S.sorties--;let m=Math.min(n.pop,LIFT);if(n.pop-m<.5)m=n.pop;n.pop-=m;N(to).queue+=m;if(n.pop<.5){n.pop=0;n.evac=false;}
+  log(`Helicopters lift ${kp(m)} civilians out of ${name(id)} to the quay at ${name(to)}.`,'key');}
 const cutsLeft=()=>S.cutT===S.turn?2-S.cutN:2;
 function orderCut(a,b){
   if(!open(a,b)||cutsLeft()<1||!spend(1))return;
@@ -598,7 +674,7 @@ function orderCut(a,b){
   const trapped=S.cols.some(c=>c.at===a||c.at===b);if(trapped)morale(-4,0);
   log(`Engineers blow the ${isRail(a,b)?'rail bridge':'road'} between ${name(a)} and ${name(b)}.${trapped?' Refugees are stranded on the far side.':''}`,'key');
 }
-function undo(){const s=UI.undo.pop();if(s){S=JSON.parse(s);UI.mode=null;}}
+function undo(){const s=UI.undo.pop();if(s){S=JSON.parse(s);UI.mode=null;UI._deploy=null;}}
 
 /* ---------- the turn ---------- */
 function endTurn(){
@@ -622,11 +698,12 @@ function endTurn(){
   }
   if(ratio<.999)log(`Supply shortfall: units are on ${Math.round(ratio*100)}% rations.`,'bad');
   // 3. fighting and infection
-  const convRate=S.flags.cure?.5:.9;
+  const convRate=(S.flags.cure?.5:.9)*(S.flags.hospitals?.85:1);
   for(const id in P){const n=N(id);if(n.H<.05){n.H=0;continue;}
     const fort=1+.5*n.F;
     const kill=Math.min(n.H,defence(id));const H0=n.H;n.H-=kill;
-    const tl=Math.min(n.T,H0*.045/fort);n.T-=tl;S.tLost+=tl;
+    const tl=Math.min(n.T,H0*.045/fort/(1+.15*(n.V||0)));n.T-=tl;S.tLost+=tl;
+    if(n.T>=.05&&kill>=.5){const v0=vetLvl(n);n.V=Math.min(3,(n.V||0)+kill/(n.T*6+3));if(vetLvl(n)>v0&&vetLvl(n)>(n.vb||0)){n.vb=vetLvl(n);log(`The garrison at ${name(id)} is now ${VET_NAMES[vetLvl(n)].toLowerCase()}.`,'good');if(vetLvl(n)>=3)S.flags.elite=1;}}
     const popF=n.pop/(n.pop+40);
     const conv=Math.min(n.pop,n.pop*.16+.5,n.H*convRate*popF/(1+n.T*.1)+(n.H>0?.3:0));
     n.pop-=conv;n.H+=conv;lose(id,conv);
@@ -663,7 +740,7 @@ function endTurn(){
       const nx=path[i];c.at=nx;
       if(c.seed){const l=c.count*.03;c.count-=l;N(nx).H+=l;lose(nx,l);c.seed=false;}
       const n=N(nx);
-      if(n.H>=.5){const f=n.H/(n.H+25+n.T*8)*.8,l=c.count*f;c.count-=l;n.H+=l*.8;lose(nx,l);hurt+=l;}
+      if(n.H>=.5){const f=n.H/(n.H+25+n.T*8)*.8*(isNight()&&!S.flags.roadlights?NIGHT.cols:1),l=c.count*Math.min(.9,f);c.count-=l;n.H+=l*.8;lose(nx,l);hurt+=l;}
       if(portOpen(nx)){n.queue+=c.count;c.count=0;break;}
       if(!(isRail(path[i-1],nx)&&steps<2&&n.H<.5&&i+1<path.length&&isRail(nx,path[i+1])))break;steps++;i++;
     }
@@ -687,9 +764,9 @@ function endTurn(){
   const sailed=Object.values(L.sailed).reduce((a,x)=>a+x,0);morale(0,Math.min(3,sailed/25));
   // 8. reinforcements, recalls
   if(t>=2){
-    if(!fallen('aldermoor'))N('aldermoor').T+=1;
-    if(!fallen('brannock'))N('brannock').T+=.75;
-    if(!fallen('torrin')&&t%2===0)N('torrin').T+=.5;
+    if(!fallen('aldermoor'))addT('aldermoor',1);
+    if(!fallen('brannock'))addT('brannock',.75);
+    if(!fallen('torrin')&&t%2===0)addT('torrin',.5);
   }
   if(S.flags.recallAt===t){const src=['brannock','aldermoor'].find(id=>N(id).T>=2)||'aldermoor';const r=Math.min(2,N(src).T);N(src).T-=r;log(`${bn(r)} battalions leave ${name(src)} for the coalition.`,'key');}
   // 9. what changed: falls, chain reactions, clearances, promises
@@ -745,6 +822,7 @@ function finish(why){
     {name:'Army intact',won:tot>=S.initT},
     {name:`${name(S.origin)} never sealed`,won:!S.flags.sealed&&nbrs(S.origin).length===E.filter(e=>e.includes(S.origin)).length},
     {name:'Every promise kept',won:S.promises.length>0&&S.promises.every(p=>p.done==='kept')},
+    {name:'An elite garrison',won:!!S.flags.elite},
   ];
   S.over={why,sheltered:sh,saved,pct,grade,turn:S.turn,milSaved:timeUp?mil.saved:0,milLost:timeUp?mil.lost:S.mobilized,stranded:stranded(),medals};
   aarFinish(timeUp);
@@ -767,8 +845,15 @@ const EVENTS=[
   {id:'okafor',turn:3,when:()=>!fallen('brennan')&&S.origin!=='brennan',eyebrow:'Decision',title:'Dr Okafor’s research',
     body:()=>'Dr Imani Okafor at St Brennan’s says she is close to a treatment that slows the turn. She needs an armed escort to get her team and samples out to Westhaven. It will take a battalion off the line for good, and the treatment needs three turns to reach the field.',
     choices:()=>{const src=['brennan','larch','torrin','aldermoor'].find(id=>N(id).T>=1&&!fallen(id));return [
-      {label:src?`Send a battalion from ${name(src)}`:'No battalion can be spared',dis:!src,go:()=>{N(src).T-=1;S.flags.okaforAt=S.turn+3;S.flags.okafor='escorted';log(`A battalion from ${name(src)} escorts Dr Okafor’s team west.`,'key');}},
-      {label:'Refuse. Every rifle is needed.',go:()=>{S.flags.okafor='refused';log('Dr Okafor’s team stays at St Brennan’s.');}}];}},
+      {label:src?`Send a battalion from ${name(src)}`:'No battalion can be spared',sub:'Lose 1 battalion for good. Treatment in 3 turns.',dis:!src,go:()=>{N(src).T-=1;S.flags.okaforAt=S.turn+3;S.flags.okafor='escorted';log(`A battalion from ${name(src)} escorts Dr Okafor’s team west.`,'key');}},
+      {label:'Fly them out by helicopter',sub:S.sorties>=2?'Uses 2 of your air sorties. Treatment in 3 turns.':`Needs 2 air sorties, you have ${S.sorties}`,dis:S.sorties<2,go:()=>{S.sorties-=2;S.flags.okaforAt=S.turn+3;S.flags.okafor='flown';log('Helicopters lift Dr Okafor’s team and samples out of St Brennan’s.','key');}},
+      {label:'Refuse. Every rifle is needed.',sub:'Her team stays at the hospital, for now.',go:()=>{S.flags.okafor='refused';log('Dr Okafor’s team stays at St Brennan’s.');}}];}},
+  // the refusal comes back when the hospital is about to go
+  {id:'okafor_siege',turn:0,when:()=>S.flags.okafor==='refused'&&S.origin!=='brennan'&&(state('brennan')==='losing'||fallen('brennan')),eyebrow:'Decision',title:'The last broadcast from St Brennan’s',
+    body:()=>`St Brennan’s is being overrun. Dr Okafor and four of her team have barricaded themselves on the hospital roof with what is left of the samples. She says the work can still be finished, but it will be slower now: four turns, not three. A helicopter can reach the roof. It may not come back.`,
+    choices:()=>[
+      {label:'Send the helicopter',sub:S.sorties>=1?'Uses 1 air sortie. Half the time it gets through: treatment in 4 turns. Confidence +3 either way.':'No air sorties left',dis:S.sorties<1,go:()=>{S.sorties--;morale(2,3);if(rng()<.5){S.flags.okaforAt=S.turn+4;S.flags.okafor='rescued';log('The helicopter lifts Dr Okafor off the roof of St Brennan’s.','good');}else{S.flags.okafor='lost';log('The rescue helicopter went down over St Brennan’s. There were no survivors.','bad');moment('Dr Okafor’s team was lost with the rescue helicopter.',30);}}},
+      {label:'Tell her we can’t reach her',sub:'Confidence −4. The treatment is lost.',go:()=>{S.flags.okafor='lost';morale(-2,-4);log('St Brennan’s goes silent. Dr Okafor’s work is lost.','bad');moment('Dr Okafor was left on the roof of St Brennan’s.',30);}}]},
   {id:'cure',turn:0,when:()=>S.flags.okaforAt&&S.turn>=S.flags.okaforAt&&!fallen('westhaven'),eyebrow:'Good news',title:'A breakthrough',
     body:()=>'Dr Okafor’s team has a working treatment for the bitten. Field hospitals can now save nearly half of the people who would have turned.',
     choices:()=>[{label:'Get it to every unit.',go:()=>{S.flags.cure=1;morale(5,8);log('The infection spreads more slowly everywhere from now on.','good');}}]},
@@ -782,6 +867,12 @@ const EVENTS=[
     choices:()=>[
       {label:'Requisition the fuel',sub:'+40 supply. Evacuations move half as many people for 4 turns, and public order falls.',go:()=>{S.supply+=40;S.flags.panic=S.turn+4;morale(-12,0);log('Fuel requisitioned. There are riots at the pumps.','key');}},
       {label:'Ration the army instead',sub:'Rail moves cost 2 orders for the rest of the war',go:()=>{S.flags.ration=1;log('The army goes on fuel rations.','key');}}]},
+  {id:'blackout',turn:7,eyebrow:'Decision',title:'The grid is failing',
+    body:()=>'The power stations are running on skeleton crews and the grid is coming apart. The engineers can keep one thing lit through the nights ahead: the evacuation routes, the floodlights on the line, or the field hospitals. Whatever you choose, the rest goes dark.',
+    choices:()=>[
+      {label:'Light the roads to the ports',sub:'Refugee columns no longer suffer worse losses at night. Public order +2.',go:()=>{S.flags.roadlights=1;S.flags.grid='roads';morale(2,0);log('The evacuation routes stay lit through the night.','key');}},
+      {label:'Floodlight the line',sub:'Unfortified garrisons no longer fight worse at night.',go:()=>{S.flags.floodlights=1;S.flags.grid='line';log('Floodlights go up along the front. The nights belong to us now.','key');}},
+      {label:'Power the field hospitals',sub:'Fewer of the bitten turn: infection spreads 15% slower. Public order +4.',go:()=>{S.flags.hospitals=1;S.flags.grid='hospitals';morale(4,0);log('The field hospitals keep their lights and their ventilators.','key');}}]},
   {id:'promise_evac',turn:9,when:()=>!!promisePlace(id=>N(id).pop>=15&&!N(id).evac),eyebrow:'A request',title:()=>`Get ${name(UI._pe=promisePlace(id=>N(id).pop>=15&&!N(id).evac))} out`,
     body:()=>{const id=UI._pe||promisePlace(id=>N(id).pop>=15);return `The bishop of ${name(id)} has ${kp(N(id).pop)} people sheltering in churches and schools. He asks for your word that every one of them will be on the road to a port by ${when(S.turn+6)}.`;},
     choices:()=>{const id=promisePlace(id=>N(id).pop>=15&&!N(id).evac);return [
@@ -803,8 +894,8 @@ const EVENTS=[
   {id:'torrin',turn:15,when:()=>N('torrin').T>=1&&!fallen('torrin')&&!fallen('calder'),eyebrow:'Decision',title:'Camp Torrin asks to fall back',
     body:()=>`Colonel Varga at Camp Torrin has ${bn(N('torrin').T)} battalions left and says the base cannot hold much longer. He wants to fall back on Port Calder and hold the harbour for the last ships.`,
     choices:()=>[
-      {label:'Fall back to Port Calder',sub:'Torrin’s garrison joins Calder, and Calder gains a level of fortification',go:()=>{N('calder').T+=N('torrin').T;N('torrin').T=0;N('calder').F=Math.min(3,N('calder').F+1);S.flags.varga='fellback';log('Camp Torrin is abandoned. Its garrison digs in at Port Calder.','key');}},
-      {label:'Hold Torrin. Every day counts.',sub:'Torrin gains a level of fortification and 2 battalions from its reserve',go:()=>{N('torrin').F=Math.min(3,N('torrin').F+1);N('torrin').T+=2;S.flags.varga='held';log('Camp Torrin will hold. Varga arms his reserve and the engineers throw up another wall.','key');}}]},
+      {label:'Fall back to Port Calder',sub:'Torrin’s garrison joins Calder, and Calder gains a level of fortification',go:()=>{addT('calder',N('torrin').T,N('torrin').V||0);N('torrin').T=0;N('torrin').V=0;N('calder').F=Math.min(3,N('calder').F+1);S.flags.varga='fellback';log('Camp Torrin is abandoned. Its garrison digs in at Port Calder.','key');}},
+      {label:'Hold Torrin. Every day counts.',sub:'Torrin gains a level of fortification and 2 battalions from its reserve',go:()=>{N('torrin').F=Math.min(3,N('torrin').F+1);addT('torrin',2);S.flags.varga='held';log('Camp Torrin will hold. Varga arms his reserve and the engineers throw up another wall.','key');}}]},
   // The march resolves in the endTurn of S.turn+1, so it is felt on when(S.turn+2). It can first qualify after turn 16, so schedule
   // it from the turn it fires (a fixed turn 17 left late marches in the past: they never happened and the countdown went negative).
   {id:'march',turn:16,when:()=>{const s=biggestHorde();return S.turn<=TURNS-2&&s&&N(s).H>=25;},eyebrow:'Intelligence',title:'The great march',
@@ -935,23 +1026,12 @@ function nodeGlyph(type,r){
   const g=GLYPH[type];if(!g)return '';
   return `<g class="glyph" transform="scale(${Math.max(.5,r*.058).toFixed(3)})">${g.f?`<path class="gf" d="${g.f}" fill-rule="evenodd"/>`:''}${g.s?`<path class="gs" d="${g.s}"/>`:''}${g.c?`<circle class="gs" cx="${g.c[0]}" cy="${g.c[1]}" r="${g.c[2]}"/>`:''}</g>`;
 }
-// the infected milling around a place: one dot per few thousand, inside the horde ring, slowly circling
-function hordeFigures(id,r,hr,H){
-  let h=0;for(const c of id)h=h*31+c.charCodeAt(0)|0;
-  const rr=mulberry(h),n=clamp(Math.round(Math.sqrt(H)*.9),3,18);let d='';
-  for(let i=0;i<n;i++){const a=rr()*6.283,q=r+2.5+rr()*Math.max(1,hr-r-4);d+=`M${(Math.cos(a)*q).toFixed(1)} ${(Math.sin(a)*q).toFixed(1)}h.01`;}
-  return `<path class="shamble" d="${d}"/>`;
-}
 // a fallen place burns: flames on the disc and smoke drifting off it
 function ruin(r){
   const k=Math.max(.6,r*.07).toFixed(2),fl='M0 0C-5 -1 -6 -7 -1 -14C-1 -9 3 -9 2 -5C4 -6 5 -8 4 -11C9 -5 7 0 0 0Z',inner='M0 0C-3 -1 -3 -5 0 -8C1 -5 4 -4 2 0Z';
   const f=(x,y,i)=>`<g transform="translate(${(x*r).toFixed(1)} ${(y*r).toFixed(1)}) scale(${k})"><g class="flame" style="animation-delay:calc(var(--ph) - ${i*.37}s)"><path d="${fl}"/><path class="core" d="${inner}"/></g></g>`;
   const sm=i=>`<circle class="smoke" cx="${(i-1)*r*.3}" cy="${(-r*.6).toFixed(1)}" r="${(r*.35+2).toFixed(1)}" style="animation-delay:calc(var(--ph) - ${i*1.4}s)"/>`;
   return `<g class="ruin">${sm(0)}${sm(1)}${sm(2)}${f(-.35,.45,0)}${f(.38,.3,1)}${f(0,-.05,2)}</g>`;
-}
-function troopBadge(T,bx,by){
-  const t=bn(T);
-  return `<g class="badge" transform="translate(${bx.toFixed(1)} ${by.toFixed(1)})"><rect width="${t.length*8+23}" height="17" rx="2"/><path class="nato" d="M4.5 4.5h11v8h-11zM4.5 4.5l11 8M15.5 4.5l-11 8"/><text x="19" y="13">${t}</text></g>`;
 }
 // ships riding at anchor off each open port, more for a bigger sailing capacity
 function shipsAt(night){
@@ -975,9 +1055,45 @@ function heatLayer(night){
   }
   return s+shipsAt(night);
 }
+// small stable number per place, so its figures face and sway the same way every redraw
+const hashId=id=>[...id].reduce((h,c)=>(h*31+c.charCodeAt(0))>>>0,7);
+// a horde as a ring of zombie figures (one per slice of its size), on the side away from the place's label
+function hordeFigures(id,r,hr){
+  const d=N(id),n=clamp(Math.ceil(Math.sqrt(d.H)/2.5),1,7),h=hashId(id);
+  const mid={r:180,l:0,t:90,b:270}[P[id].ls||'r'],step=30,rad=Math.max(r+3,(r+hr)/2),sc=1+Math.min(.35,d.H/500);
+  let out='';
+  for(let i=0;i<n;i++){
+    const a=(mid+(i-(n-1)/2)*step)*Math.PI/180,x=Math.cos(a)*rad,y=Math.sin(a)*rad+5*sc,f=(h>>i)&1?1:-1;
+    out+=`<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${(f*sc).toFixed(2)} ${sc.toFixed(2)})"><use href="#zed" class="zed" style="animation-delay:-${((h>>(i+3))%17)/10}s"/></g>`;
+  }
+  return out;
+}
+// battalion badge: one to three soldiers and the count
+function troopBadge(T,bx,by){
+  const k=T<3?1:T<7?2:3,lbl=bn(T),w=6+k*5+4+lbl.length*8+4;
+  let f='';for(let i=0;i<k;i++)f+=`<use href="#trooper" class="trooper" transform="translate(${7+i*5} 15.5) scale(1.05)"/>`;
+  return `<g class="badge" transform="translate(${bx.toFixed(1)} ${by.toFixed(1)})"><rect width="${w}" height="17" rx="2"/>${f}<text x="${8+k*5+2}" y="13">${lbl}</text></g>`;
+}
+// zombie figures walking a forecast arrow, more of them for a bigger flow
+function marchers(f,x1,y1,x2,y2){
+  const k=f.amt>=40?3:f.amt>=10?2:1,dx=x2-x1,dy=y2-y1,sc=dx<0?-1:1;
+  let out='';
+  for(let i=0;i<k;i++)out+=`<g transform="translate(${x1.toFixed(1)} ${y1.toFixed(1)})"><g class="marcher" style="--dx:${dx.toFixed(1)}px;--dy:${dy.toFixed(1)}px;animation-delay:-${(i*3.2/k).toFixed(2)}s"><g transform="translate(0 4) scale(${sc} 1)"><use href="#zed" class="zed"/></g></g></g>`;
+  return out;
+}
+// soldiers walking from where a move order was given to where it went; plays once, then is dropped
+const DEPLOY_MS=1400;
+function deployFigures(){
+  const m=UI._deploy;if(!m)return '';
+  const age=performance.now()-m.t;if(age>DEPLOY_MS||!P[m.from]||!P[m.to]){UI._deploy=null;return '';}
+  const A=P[m.from],B=P[m.to],k=m.amt>=4?3:m.amt>=2?2:1,dx=B.x-A.x,dy=B.y-A.y,sc=dx<0?-1.1:1.1;
+  let out='';
+  for(let i=0;i<k;i++){const ox=(i-(k-1)/2)*7;out+=`<g transform="translate(${(A.x+ox).toFixed(1)} ${(A.y+4+i%2*3).toFixed(1)})"><g class="deploy" style="--dx:${dx.toFixed(1)}px;--dy:${dy.toFixed(1)}px;--t:${DEPLOY_MS}ms;animation-delay:-${Math.round(age+i*60)}ms"><g transform="scale(${sc} 1.1)"><use href="#trooper" class="trooper"/></g></g></g>`;}
+  return out;
+}
 function renderMap(){
   const sel=UI.sel,mode=UI.mode;let s='';
-  const night=S.turn%2===1;
+  const night=isNight();
   $('#heat').innerHTML=heatLayer(night);
   const targets=mode&&mode.kind==='move'?moveTargets(mode.from):null;
   for(const [a,b,rail] of E){
@@ -995,13 +1111,13 @@ function renderMap(){
   // forecast arrows
   UI._flows=flows();
   $('#flows').innerHTML=UI._flows.map(f=>{const [x1,y1]=along(f.from,f.to,.25),[x2,y2]=along(f.from,f.to,.62),[lx,ly]=along(f.from,f.to,.44);
-    return `<line class="flow" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke-width="${clamp(1.5+Math.sqrt(f.amt)*.7,2,6).toFixed(1)}"/><text class="flowlbl" x="${lx.toFixed(1)}" y="${(ly-6).toFixed(1)}" text-anchor="middle">~${kp(f.amt)}</text>`;}).join('');
+    return `<line class="flow" x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke-width="${clamp(1.5+Math.sqrt(f.amt)*.7,2,6).toFixed(1)}"/>${marchers(f,x1,y1,x2,y2)}<text class="flowlbl" x="${lx.toFixed(1)}" y="${(ly-6).toFixed(1)}" text-anchor="middle">~${kp(f.amt)}</text>`;}).join('');
   // refugee columns, pointing to their next stop
   const g={};for(const c of S.cols)g[c.at]=(g[c.at]||0)+c.count;
   $('#cols').innerHTML=Object.entries(g).map(([id,c])=>{
     const path=routeToPort(id);const nx=path&&path[1];
     if(nx){const [x1,y1]=along(id,nx,.2),[x2,y2]=along(id,nx,.4);return `<g class="col"><line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}"/><circle cx="${x1.toFixed(1)}" cy="${y1.toFixed(1)}" r="6"/><text x="${(x1+9).toFixed(1)}" y="${(y1+16).toFixed(1)}">${kp(c)}</text></g>`;}
-    const p=P[id],x=p.x-R(id)-10,y=p.y+R(id)+6;return `<g class="col"><circle cx="${x}" cy="${y}" r="6"/><text x="${x-12}" y="${y+18}">${kp(c)}</text></g>`;}).join('');
+    const p=P[id],x=p.x-R(id)-10,y=p.y+R(id)+6;return `<g class="col"><circle cx="${x}" cy="${y}" r="6"/><text x="${x-12}" y="${y+18}">${kp(c)}</text></g>`;}).join('')+deployFigures();
   let n='';
   const cutTo=mode&&mode.kind==='cut'?new Set(nbrs(mode.from)):null;
   // one tab stop for the whole map (arrow keys move between places); in move/cut mode every valid pick is a tab stop too
@@ -1015,7 +1131,7 @@ function renderMap(){
     n+=`<g class="node ${st}" data-node="${id}" tabindex="${id===stop||pick?0:-1}"${pick?' data-pick=""':''} role="button" aria-label="${esc(nodeLabel(id,st,targets,cutTo))}" transform="translate(${p.x} ${p.y})">
       <circle r="${Math.max(r+12,26)}" fill="transparent"/>
       <circle class="focusring" r="${r+13}"/><circle class="focusring" r="${r+13}"/>
-      ${hr?`<circle class="horde" r="${hr.toFixed(1)}"/>${st==='fallen'?'':hordeFigures(id,r,hr,d.H)}`:''}
+      ${hr?`<circle class="horde" r="${hr.toFixed(1)}"/>`:''}
       ${spark?`<circle class="spark" r="${r+8}"/><text class="sparkmark" x="${-r-14}" y="${-r+4}">!</text>`:''}
       ${sel===id?`<circle class="sel" r="${r+6}"/><circle class="selspin" r="${r+10}"/>`:''}
       ${targets&&targets.has(id)?`<circle class="target" r="${r+9}"/>`:''}
@@ -1026,6 +1142,7 @@ function renderMap(){
       <circle class="disc" r="${r}"/><circle class="shade" r="${(r-1).toFixed(1)}"/>
       ${nodeGlyph(p.type,r)}
       ${st==='fallen'?ruin(r):''}
+      ${hr?hordeFigures(id,r,hr):''}
       ${d.evac?`<circle class="evac" cx="${(-r*.7).toFixed(1)}" cy="${(-r*.7).toFixed(1)}" r="5"/>`:''}
       ${d.T>=.05?troopBadge(d.T,bx,by):''}
       <text class="name" x="${lp.x}" y="${lp.y}" text-anchor="${lp.anchor}">${esc(p.name)}</text>
@@ -1048,7 +1165,7 @@ function nodeLabel(id,st,targets,cutTo){
   bits.push(`${p.name}, ${TYPE_LABEL[p.type]}, ${STATE_LABEL[st]}`);
   bits.push(d.pop>=.5?`${kp(d.pop)} civilians`:'no civilians');
   if(d.H>=.5)bits.push(`${kp(d.H)} infected`);
-  if(d.T>=.05)bits.push(`${bn(d.T)} battalion${bn(d.T)==='1'?'':'s'}`);
+  if(d.T>=.05)bits.push(`${bn(d.T)} ${vetName(d).toLowerCase()} battalion${bn(d.T)==='1'?'':'s'}`);
   if(d.F)bits.push(`fortified ${d.F}/3`);
   if(P[id].type==='port'&&d.queue>=.5)bits.push(`${kp(d.queue)} on the quay`);
   if(d.evac)bits.push('evacuating');
@@ -1077,7 +1194,7 @@ function renderTop(){
   const slots=Math.max(S.cpMax,S.cp);
   const pips=Array.from({length:slots},(_,i)=>`<i class="${i<S.cp?'on':S.conf<30&&i===S.cpMax-1?'gone':''}"></i>`).join('');
   $('#top').innerHTML=`<div class="brand">${EMBLEM}<div>Last Boat to Calder<small>Vessmark · Joint Command · ${DIFFS[S.diff].name}</small></div></div>
-    <div class="stat clock"><span>${dayIcon(S.turn%2===1)}${when(S.turn)}</span><b>${left} turn${left===1?'':'s'} left</b>${turnStrip()}</div>
+    <div class="stat clock"><span>${dayIcon(isNight())}${when(S.turn)}</span><b>${left} turn${left===1?'':'s'} left</b>${turnStrip()}</div>
     <div class="stat"><span>Orders</span><div class="cp" role="img" aria-label="${S.cp} order${S.cp===1?'':'s'} left">${pips}</div></div>
     <div class="stat"><span>Supply</span><b>${Math.round(S.supply)}</b></div>
     <div class="stat"><span>Evacuated</span><b class="good">${kp(S.evacuated)}</b></div>
@@ -1127,7 +1244,7 @@ function placePanel(id){
   const btn=(act,label,small,reason,extra='')=>`<button class="btn${extra}" data-act="${act}" ${reason?'disabled':''}>${label}${reason?`<small class="why">${esc(reason)}</small>`:`<small>${small}</small>`}</button>`;
   if(n.T>=.05){
     const mWhy=why(noCp(1),[!nT,'No open road or railway out of here']);
-    orders+=`<div class="sec"><p class="label">Move troops</p><div class="amts">${amts.map(a=>`<button class="btn" data-act="move" data-amt="${a}" ${mWhy?'disabled':''}>${a} bn</button>`).join('')}${n.T-Math.floor(n.T)>.05?`<button class="btn" data-act="move" data-amt="${n.T}" ${mWhy?'disabled':''}>All ${bn(n.T)}</button>`:''}</div>${mWhy?`<p class="note"><b class="bad">Can’t move: ${esc(mWhy.toLowerCase())}.</b></p>`:''}<p class="note">A road move costs 1 order. Rail moves cost ${S.flags.ration?'2 orders (fuel rationing)':'1 order'} and reach any station along track that isn’t infected.</p></div>`;
+    orders+=`<div class="sec"><p class="label">Move troops</p><div class="amts">${amts.map(a=>`<button class="btn" data-act="move" data-amt="${a}" ${mWhy?'disabled':''}>${a} bn</button>`).join('')}${n.T-Math.floor(n.T)>.05?`<button class="btn" data-act="move" data-amt="${n.T}" ${mWhy?'disabled':''}>All ${bn(n.T)}</button>`:''}</div>${mWhy?`<p class="note"><b class="bad">Can’t move: ${esc(mWhy.toLowerCase())}.</b></p>`:''}${`<p class="note">This garrison is ${vetName(n).toLowerCase()}${(n.V||0)>=.05?` (+${Math.round(12*(n.V||0))}% killing power)`:''}. Troops carry their experience with them; fresh troops dilute it.</p>`}<p class="note">A road move costs 1 order. Rail moves cost ${S.flags.ration?'2 orders (fuel rationing)':'1 order'} and reach any station along track that isn’t infected.</p></div>`;
   }
   const ev=n.evac;
   orders+=`<div class="sec"><p class="label">Orders</p>${n.pop>=1||ev?`<p class="note">${esc(evacPreview(id))}</p>`:''}<div class="orders">
@@ -1135,7 +1252,8 @@ function placePanel(id){
     ${btn('fortify','Fortify',`1 order · 8 supply · level ${n.F}/3`,why([n.F>=3,'Fully fortified (3/3)'],[n.H>=.5,'Not while infected'],noCp(1),[S.supply<8,`Needs 8 supply, you have ${Math.round(S.supply)}`]))}
     ${btn('airdrop','Air-drop supplies',`1 order · 10 supply · ${net.has(id)?'not needed here':'keeps a cut-off garrison fighting'}`,why(noCp(1),[S.supply<10,`Needs 10 supply, you have ${Math.round(S.supply)}`]))}
     ${btn('militia','Raise militia','1 order · 10k civilians → 1 bn · order −2',why([fallen(id),'This place has fallen'],[n.pop<15,'Needs at least 15k civilians here'],noCp(1)))}
-    ${btn('strike','Air strike',`2 orders · kills up to 20k infected and ${kp(n.pop*.15)} civilians`,why([n.H<.5,'No infected here to strike'],[S.sorties<1,'No air sorties left'],noCp(2)))}
+    ${btn('strike','Air strike',`2 orders · 1 sortie · kills up to 20k infected and ${kp(n.pop*.15)} civilians`,why([n.H<.5,'No infected here to strike'],[S.sorties<1,'No air sorties left'],noCp(2)))}
+    ${p.type==='port'?'':btn('airlift','Helicopter airlift',`1 order · 1 sortie · flies ${kp(Math.min(n.pop,LIFT))} to the quay at ${liftPort()?name(liftPort()):'a port'}`,why([fallen(id),'This place has fallen'],[n.pop<1,'No civilians left here'],[!liftPort(),'No open port to land at'],[S.sorties<1,'No air sorties left'],noCp(1)))}
     ${btn('cut','Blow a road or bridge',`1 order · permanent · ${cutsLeft()} left this turn`,why([!nbrs(id).length,'No open roads left out of here'],[cutsLeft()<1,'Already blew 2 this turn (the limit)'],noCp(1)))}
   </div></div>`;
   return `<div class="sec place"><div class="row"><div class="kind"><span class="label">${TYPE_LABEL[p.type]}</span><span class="state ${st}">${STATE_LABEL[st]}</span>${n.evac?'<span class="state evac">Evacuating</span>':''}</div><button class="btn" data-act="deselect">Close</button></div>
@@ -1144,6 +1262,7 @@ function placePanel(id){
       <div><b>${kp(n.pop)}</b><span>Civilians</span></div>
       <div><b class="${n.H>=.5?'bad':''}">${kp(n.H)}</b><span>Infected</span></div>
       <div><b>${bn(n.T)}</b><span>Battalions</span></div>
+      ${n.T>=.05?`<div><b style="font-size:14px">${vetName(n)}</b><span>Experience</span></div>`:''}
       <div><b>${n.F}/3</b><span>Fortified</span></div>
       <div><b class="${supTxt.startsWith('Cut')||supTxt==='Short'?'bad':''}" style="font-size:14px">${supTxt}</b><span>Supply</span></div>
       ${p.type==='port'?`<div><b class="good">${kp(n.queue)}</b><span>On the quay</span></div><div><b>${capOf(id)}k</b><span>Ships / turn</span></div>`:''}
@@ -1172,7 +1291,8 @@ function situation(){
   rows.sort((a,b)=>order[a.st]-order[b.st]||b.inc-a.inc||b.n.H-a.n.H||b.n.pop-a.n.pop);
   const onRoad=S.cols.reduce((a,c)=>a+c.count,0);
   const prom=S.promises.filter(p=>!p.done);
-  return `<div class="sec"><p class="label">Situation</p>
+  const nightTxt=isNight()?`Night falls when you end this turn: hordes travel further${S.flags.floodlights?'':', unfortified garrisons below veteran fight at 85%'}${S.flags.roadlights?'':' and refugee columns caught on the road lose more'}.`:'Daylight: hordes move more slowly this turn. Night follows.';
+  return `<div class="sec"><p class="label">Situation</p><p class="callout${isNight()?' bad':''}">${esc(nightTxt)}</p>
     <div class="sitlist">${rows.filter(r=>['losing','holding','threat'].includes(r.st)).map(r=>`<button data-act="select" data-id="${r.id}"><span>${esc(name(r.id))}${S.nextSpark&&S.nextSpark.id===r.id?' <span class="bad">!</span>':''}</span><em class="${r.st==='losing'||r.st==='fallen'?'bad':''}">${STATE_LABEL[r.st]}${r.n.H>=.5?' · '+kp(r.n.H):''}${r.inc>=.8?' · ~'+kp(r.inc)+' incoming':''} · ${bn(r.n.T)} bn</em></button>`).join('')||'<p class="note">No threats.</p>'}</div>
     ${rows.some(r=>r.st==='fallen')?`<p class="note"><b class="bad">Fallen:</b> ${rows.filter(r=>r.st==='fallen').map(r=>esc(name(r.id))).join(', ')}.</p>`:''}
     ${S.nextSpark&&!['losing','holding','threat'].includes(state(S.nextSpark.id))?`<p class="callout bad">Infected travellers sighted near ${esc(name(S.nextSpark.id))}.</p>`:''}
@@ -1200,9 +1320,12 @@ const HELP=`<dl class="helpgrid">
   <dt>bn</dt><dd>Battalions. Each kills about 2 thousand infected a turn when supplied, more when fortified.</dd>
   <dt>Arrows</dt><dd>Red arrows show where hordes will move when you end the turn. A “!” marks a place where infected travellers will start a new outbreak.</dd>
   <dt>Roads</dt><dd>Hordes, refugees and supply all move along open roads. Blowing a road is how you hold a line, but it traps your own people too.</dd>
+  <dt>Night</dt><dd>Every second turn is a night. At night hordes spill further along the roads, unfortified garrisons that are not yet veterans fight at 85%, and refugee columns caught by infected suffer more. By day hordes move more slowly. The forecast arrows already allow for it.</dd>
+  <dt>Experience</dt><dd>Garrisons that kill infected gain experience: green, blooded, veteran, elite. Each level adds 12% killing power and cuts their own losses; veterans and better ignore the night penalty. Troops carry their experience when they move, and fresh troops, militia and reinforcements dilute it. The army bases start blooded.</dd>
+  <dt>Sorties</dt><dd>Five air sorties for the whole campaign, shared by air strikes (2 orders, kills infected and some civilians) and helicopter airlifts (1 order, flies up to 6k civilians from a place that isn’t a port onto the least crowded open quay). An airlift is the only way out for a town cut off from every port.</dd>
   <dt>Supply</dt><dd>Only reaches places with an unbroken route to Aldermoor. Cut-off garrisons weaken every turn unless you air-drop supplies.</dd>
   <dt>Gauges</dt><dd>Public order below 35 slows evacuations. Confidence of 80 or more earns an extra order each turn; below 30 costs you one; at 0 you are relieved of command. Keeping promises is the surest way to raise it.</dd>
-  <dt>Keys</dt><dd>E ends the turn, U undoes your last order, Esc cancels or closes, + and − zoom the map. On the map, arrow keys move between places and Enter selects one; while moving troops or blowing a road, Tab steps through the places you can pick.</dd>
+  <dt>Keys</dt><dd>E ends the turn, U undoes your last order, Esc cancels or closes, + and − zoom the map. On the map, arrow keys move between places and Enter selects one; while moving troops or blowing a road, Tab steps through the places you can pick. In a dialog, arrow keys step through its buttons.</dd>
 </dl>`;
 function renderOverlay(){
   const o=$('#overlay');let html='';
@@ -1357,8 +1480,15 @@ function setupRecord(st){
     <ul class="aar-runs">${runs.slice(-4).reverse().map(r=>runRow(r,false,true)).join('')}</ul>`;
 }
 function shareText(){
-  const v=S.over,url=/^https?:/.test(location.protocol)?' '+location.href.split('#')[0]:'';
-  return `Last Boat to Calder · ${scName(S.scenario)} · ${dfName(S.diff)} · seed ${S.seed}: I saved ${Math.round(v.pct)}% of Vessmark (${v.grade}). Enter the seed in a new campaign to play the same outbreak.${url}`;
+  const v=S.over,url=/^https?:/.test(location.protocol)?' '+shareLink():'';
+  return `Last Boat to Calder · ${scName(S.scenario)} · ${dfName(S.diff)} · seed ${S.seed}: I saved ${Math.round(v.pct)}% of Vessmark (${v.grade}). ${url?'Open the link to':'Enter the seed in a new campaign to'} play the same outbreak.${url}`;
+}
+// a link such as …/#seed=123&scenario=random&diff=veteran opens the setup screen with that campaign filled in
+const shareLink=()=>`${location.href.split('#')[0]}#seed=${S.seed}&scenario=${S.scenario}&diff=${S.diff}`;
+function readLink(){
+  let q;try{q=new URLSearchParams(location.hash.slice(1));}catch(e){return null;}
+  const seed=Math.abs(parseInt(q.get('seed'),10));if(!seed)return null;
+  return {seed,scenario:SCEN_NAME[q.get('scenario')]?q.get('scenario'):'kessler',diff:DIFFS[q.get('diff')]?q.get('diff'):'regular'};
 }
 function copyShare(){
   const txt=shareText(),id=S.over.id;
@@ -1399,7 +1529,7 @@ document.addEventListener('click',e=>{
 function render(){
   // every render rebuilds the panels, so note what had keyboard focus and put it back afterwards
   const ae=document.activeElement,fk=focusKey(ae),fbox=boxOf(ae),wasOv=!$('#overlay').hidden;
-  renderTop();renderMap();renderSide();renderOverlay();
+  renderTop();renderMap();renderSide();renderOverlay();feel.decorate();
   const ov=!$('#overlay').hidden;
   for(const el of [$('.wrap'),$('#sheet'),$('#cmdbar')])el.inert=ov; // dialogs are modal: nothing behind them can be tabbed to
   if(ov&&!wasOv)UI._ret=fk&&{k:fk,box:fbox};
@@ -1482,7 +1612,7 @@ document.addEventListener('click',e=>{
   const nd=e.target.closest('[data-node]');
   if(nd&&!blocking()){
     const id=nd.dataset.node;
-    if(UI.mode&&UI.mode.kind==='move'){if(moveTargets(UI.mode.from).has(id)){const cp=S.cp;orderMove(UI.mode.from,id,UI.mode.amt);if(S.cp===cp)UI._say='Not enough orders left for that move.';UI.mode=null;UI.sel=id;}else if(id===UI.mode.from)UI.mode=null;else UI._say=`${name(id)} can’t be reached from ${name(UI.mode.from)}. Pick a highlighted place, or press Escape to cancel.`;render();return;}
+    if(UI.mode&&UI.mode.kind==='move'){if(moveTargets(UI.mode.from).has(id)){const cp=S.cp;orderMove(UI.mode.from,id,UI.mode.amt);if(S.cp===cp)UI._say='Not enough orders left for that move.';else{UI._deploy={from:UI.mode.from,to:id,amt:UI.mode.amt,t:performance.now()};}UI.mode=null;UI.sel=id;}else if(id===UI.mode.from)UI.mode=null;else UI._say=`${name(id)} can’t be reached from ${name(UI.mode.from)}. Pick a highlighted place, or press Escape to cancel.`;render();return;}
     if(UI.mode&&UI.mode.kind==='cut'){if(nbrs(UI.mode.from).includes(id)){orderCut(UI.mode.from,id);UI.mode=null;}render();return;}
     UI.sel=UI.sel===id?null:id;UI.mode=null;render();return;
   }
@@ -1504,7 +1634,7 @@ document.addEventListener('click',e=>{
     case 'zoomout':PREFS.zoom=Math.max(1,+(PREFS.zoom-.25).toFixed(2));savePrefs();break;
     case 'decide':decide(+b.dataset.i);break;
     case 'closereport':UI.showReport=false;break;
-    case 'end':UI.mode=null;endTurn();break;
+    case 'end':UI.mode=null;feel.endTurn();break;
     case 'undo':doUndo();break;
     case 'cancel':UI.mode=null;break;
     case 'select':UI.sel=b.dataset.id;UI.mode=null;UI._focus='place';break;
@@ -1516,6 +1646,7 @@ document.addEventListener('click',e=>{
     case 'airdrop':if(id)orderAirdrop(id);break;
     case 'militia':if(id)orderMilitia(id);break;
     case 'strike':if(id)orderStrike(id);break;
+    case 'airlift':if(id)orderAirlift(id);break;
   }
   render();
 });
@@ -1536,11 +1667,17 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();const to=nodeStep(t.dataset.node,e.key),el=to&&$(`#nodes [data-node="${to}"]`);if(el)el.focus();return;
   }
   if(e.metaKey||e.ctrlKey||e.altKey)return;
+  const ov=!$('#overlay').hidden&&e.target.closest&&e.target.closest('#overlay');
+  if(ov&&/^Arrow/.test(e.key)&&!e.shiftKey&&e.target.matches('button,summary')){
+    const els=[...ov.querySelectorAll('button:not([disabled]),summary')].filter(el=>el.offsetParent!==null),i=els.indexOf(e.target);
+    if(i>=0&&els.length>1){e.preventDefault();const d=e.key==='ArrowDown'||e.key==='ArrowRight'?1:-1;els[(i+d+els.length)%els.length].focus();}
+    return;
+  }
   if(e.key==='?'){UI.help=!UI.help;render();return;}
   if(e.key==='+'||e.key==='='){$('[data-act="zoomin"]').click();return;}
   if(e.key==='-'){$('[data-act="zoomout"]').click();return;}
   if(blocking())return;
-  if(e.key==='e'||e.key==='E'){UI.mode=null;endTurn();render();}
+  if(e.key==='e'||e.key==='E'){UI.mode=null;feel.endTurn();render();}
   else if(e.key==='u'||e.key==='U'){doUndo();render();}
 });
 // the map has one tab stop that follows the focused place (plus every valid pick while choosing a destination or a road)
@@ -1551,12 +1688,248 @@ document.addEventListener('focusin',e=>{
 });
 let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{if(S)render();},120);});
 
+/* ---------- feel: sound, turn feedback, first-time tips ---------- */
+// Self-contained. Hooks: render() calls feel.decorate(); the E key and the End turn button call feel.endTurn().
+// Nothing here changes the campaign, takes keyboard focus or speaks over the turn announcement, and every entry point is guarded so a fault here can't break play.
+const feel=(()=>{
+  const TIP_KEY='lastboat_tips_done';
+  const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const safe=f=>(...a)=>{try{return f(...a);}catch(e){if(window.console)console.warn('feel:',e);}};
+  if(PREFS.sound==null)PREFS.sound=true;
+
+  /* --- procedural sound (Web Audio, no files): nothing is created until the first click or key press --- */
+  let ac=null,out=null,noiseBuf=null,drone=null,armed=false;
+  const VOL=.5;
+  function ctx(){
+    if(!armed||!PREFS.sound)return null;
+    if(!ac){const C=window.AudioContext||window.webkitAudioContext;if(!C)return null;
+      ac=new C();out=ac.createGain();out.gain.value=VOL;const comp=ac.createDynamicsCompressor();out.connect(comp);comp.connect(ac.destination);
+      noiseBuf=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate);const d=noiseBuf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+      startDrone();}
+    if(ac.state==='suspended')ac.resume();
+    return ac;
+  }
+  function env(g,t,peak,a,hold,r){g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(peak,t+a);g.gain.setValueAtTime(peak,t+a+hold);g.gain.exponentialRampToValueAtTime(.0001,t+a+hold+r);return t+a+hold+r;}
+  function tone(f,{to,type='sine',gain=.05,a=.005,hold=0,r=.12,at=0,lp,vib}={}){
+    const c=ctx();if(!c)return;const t=c.currentTime+at,o=c.createOscillator(),g=c.createGain(),end=t+a+hold+r;
+    o.type=type;o.frequency.setValueAtTime(f,t);if(to)o.frequency.exponentialRampToValueAtTime(to,end);
+    let node=o;if(lp){const fl=c.createBiquadFilter();fl.type='lowpass';fl.frequency.value=lp;o.connect(fl);node=fl;}
+    if(vib){const l=c.createOscillator(),lg=c.createGain();l.frequency.value=vib[0];lg.gain.value=vib[1];l.connect(lg);lg.connect(o.frequency);l.start(t);l.stop(end+.05);}
+    node.connect(g);g.connect(out);env(g,t,gain,a,hold,r);o.start(t);o.stop(end+.05);
+  }
+  function noise({gain=.1,a=.002,hold=0,r=.2,at=0,type='lowpass',f=1000,to,q=.7}={}){
+    const c=ctx();if(!c)return;const t=c.currentTime+at,s=c.createBufferSource(),fl=c.createBiquadFilter(),g=c.createGain(),end=t+a+hold+r;
+    s.buffer=noiseBuf;s.loop=true;fl.type=type;fl.Q.value=q;fl.frequency.setValueAtTime(f,t);if(to)fl.frequency.exponentialRampToValueAtTime(to,end);
+    s.connect(fl);fl.connect(g);g.connect(out);env(g,t,gain,a,hold,r);s.start(t);s.stop(end+.05);
+  }
+  function startDrone(){
+    const c=ac,g=c.createGain(),fl=c.createBiquadFilter(),lfo=c.createOscillator(),lg=c.createGain();
+    g.gain.value=.0001;fl.type='lowpass';fl.frequency.value=180;fl.Q.value=3;
+    lfo.frequency.value=.06;lg.gain.value=70;lfo.connect(lg);lg.connect(fl.frequency);lfo.start();
+    for(const [f,ty] of [[55,'sawtooth'],[55.35,'sawtooth'],[82.4,'triangle']]){const o=c.createOscillator();o.type=ty;o.frequency.value=f;o.connect(fl);o.start();}
+    fl.connect(g);g.connect(out);drone=g;tension();
+  }
+  // the drone swells a little as places fall and the infection quickens
+  function tension(){
+    if(!drone||!S||!S.nodes)return;
+    const lost=Object.keys(P).filter(fallen).length;
+    const lvl=S.over||UI.setup?.008:.016+Math.min(.022,lost*.003+Math.min(S.infRate,6)*.002);
+    drone.gain.setTargetAtTime(lvl,ac.currentTime,1.5);
+  }
+  const SFX={
+    click:()=>{tone(1500,{type:'triangle',gain:.025,r:.04});noise({type:'highpass',f:3500,gain:.02,r:.03});},
+    order:()=>{tone(440,{type:'triangle',gain:.06,r:.09});tone(660,{type:'triangle',gain:.06,r:.16,at:.07});noise({type:'bandpass',f:2400,gain:.025,r:.05});},
+    undo:()=>{tone(620,{type:'triangle',gain:.045,r:.08});tone(410,{type:'triangle',gain:.045,r:.12,at:.06});},
+    boom:(at=0)=>{noise({gain:.45,a:.004,r:1.3,f:1600,to:90,at});tone(70,{to:28,gain:.4,r:.9,at});noise({type:'highpass',f:2500,gain:.06,r:.15,at});},
+    drum:()=>{for(const [at,gn] of [[0,.32],[.26,.26],[.52,.36]]){tone(120,{to:45,gain:gn,r:.35,at});noise({f:500,gain:.12,r:.12,at});}},
+    horn:(at=0)=>{for(const f of [87,130.5,87.6])tone(f,{type:'sawtooth',gain:.045,a:.25,hold:1.1,r:.7,lp:650,at});},
+    groan:(at=0)=>{tone(78,{to:52,type:'sawtooth',gain:.06,a:.3,hold:.6,r:.8,lp:380,vib:[5.5,4],at});tone(104,{to:70,type:'sawtooth',gain:.035,a:.4,hold:.5,r:.8,lp:420,vib:[4.2,5],at:at+.15});},
+    alarm:(at=0)=>{for(let i=0;i<4;i++)tone(i%2?560:700,{type:'square',gain:.018,a:.01,hold:.16,r:.04,lp:1600,at:at+i*.22});},
+    clear:(at=0)=>{[392,494,587].forEach((f,i)=>tone(f,{type:'triangle',gain:.04,r:.5,at:at+i*.08}));},
+    wire:()=>{[0,.09,.18,.36,.45].forEach(at=>tone(880,{gain:.025,a:.004,hold:.04,r:.02,at}));},
+    end:()=>{[196,233,294].forEach((f,i)=>tone(f,{type:'triangle',gain:.05,a:.3,hold:1.5,r:1.2,at:i*.12,lp:1200}));},
+  };
+  const play=(k,...a)=>{if(PREFS.sound&&armed)safe(SFX[k])(...a);};
+  const arm=safe(()=>{if(armed)return;armed=true;ctx();});
+
+  /* --- turn feedback: what changed over the last 12 hours --- */
+  let pending=null;
+  function snap(){const nodes={};for(const id in P)nodes[id]={st:state(id),H:N(id).H};return {turn:S.turn,seed:S.seed,nodes};}
+  function changes(b){
+    const L=S.last||{lostBy:{},sailed:{},dEvac:0,dLost:0},fx=[];
+    for(const id in P){const was=b.nodes[id],now=state(id),lines=[];
+      if(now==='fallen'&&was.st!=='fallen')lines.push(['Fallen','bad',5]);
+      else if(infectedState(now)&&!infectedState(was.st)&&was.st!=='fallen')lines.push(['Outbreak','bad',3]);
+      else if((infectedState(was.st)||was.st==='fallen')&&!infectedState(now)&&now!=='fallen'&&now!=='cleared')lines.push(['Cleared','good',4]);
+      if((L.sailed[id]||0)>=.5)lines.push([`+${kp(L.sailed[id])} sailed`,'good',4]);
+      if((L.lostBy[id]||0)>=1)lines.push([`−${kp(L.lostBy[id])}`,'bad',2]);
+      const kill=was.H-N(id).H;if(kill>=3&&N(id).H<was.H*.6&&!lines.length)lines.push([`−${kp(kill)} inf`,'good',1]);
+      if(lines.length)fx.push({id,lines,w:Math.max(...lines.map(l=>l[2])),fell:lines[0][0]==='Fallen',clear:lines[0][0]==='Cleared',outbreak:lines[0][0]==='Outbreak'});
+    }
+    fx.sort((a,c)=>c.w-a.w);
+    return {fx,L,over:!!S.over};
+  }
+  function endTurnFx(){
+    let b=null;try{if(S&&!S.over)b=snap();}catch(e){}
+    endTurn();
+    if(b)safe(()=>{if(S.turn!==b.turn&&S.seed===b.seed)pending=changes(b);})();
+  }
+  function fxLayer(){
+    const svg=$('#map');if(!svg)return null;let g=$('#feelfx');
+    if(!g){g=document.createElementNS('http://www.w3.org/2000/svg','g');g.id='feelfx';g.setAttribute('aria-hidden','true');}
+    if(g!==svg.lastElementChild)svg.appendChild(g);
+    return g;
+  }
+  function floaters(fx){
+    const g=fxLayer();if(!g)return;let s='';
+    fx.slice(0,9).forEach((f,i)=>{const p=P[f.id],r=R(f.id),d=i*.12;
+      if(f.fell)s+=`<g transform="translate(${p.x} ${p.y})"><circle class="feel-ring" r="${(r+6).toFixed(1)}" style="animation-delay:${d.toFixed(2)}s"/></g>`;
+      f.lines.forEach((l,j)=>{s+=`<g transform="translate(${p.x} ${(p.y-r-14-j*19).toFixed(1)})"><text class="feel-float ${l[1]}" text-anchor="middle" style="animation-delay:${(d+j*.1).toFixed(2)}s">${esc(l[0])}</text></g>`;});
+    });
+    g.innerHTML=s;
+    if(!reduced())for(const f of fx)if(f.fell){const el=$(`#nodes [data-node="${f.id}"]`);if(el)el.classList.add('feel-shake');}
+    clearTimeout(floaters.t);floaters.t=setTimeout(()=>{const l=$('#feelfx');if(l)l.innerHTML='';},4200);
+  }
+  function layer(id,cls){let e=document.getElementById(id);if(!e){e=document.createElement('div');e.id=id;e.className=cls;e.setAttribute('aria-hidden','true');document.body.appendChild(e);}return e;}
+  function replay(el,ms){el.classList.remove('on');void el.offsetWidth;el.classList.add('on');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('on'),ms);}
+  function curtain(){
+    const c=layer('feelcurtain','feel-curtain');
+    c.innerHTML=`<p><b>12 hours later</b><span>${esc(when(S.turn))}</span></p>`;
+    replay(c,1500);
+  }
+  function toast(ch){
+    const L=ch.L,chips=[],names=k=>ch.fx.filter(f=>f[k]).map(f=>name(f.id));
+    if(L.dEvac>=.5)chips.push([`+${kp(L.dEvac)} sailed`,'good']);
+    if(L.dLost>=.5)chips.push([`−${kp(L.dLost)} lost`,'bad']);
+    const fell=names('fell');if(fell.length)chips.push([`${fell.join(', ')} fell`,'bad']);
+    const clr=names('clear');if(clr.length)chips.push([`${clr.join(', ')} cleared`,'good']);
+    const ob=names('outbreak').length;if(ob)chips.push([`${ob} new outbreak${ob>1?'s':''}`,'bad']);
+    if(!chips.length)chips.push([S.turn%2?'A quiet day':'A quiet night','']);
+    const t=layer('feeltoast','feel-toast');
+    t.innerHTML=`<span class="feel-when">${esc(when(S.turn))}</span>${chips.map(([x,k])=>`<span class="feel-chip ${k}">${esc(x)}</span>`).join('')}`;
+    replay(t,5200);
+  }
+  function turnSounds(ch){
+    play('drum');
+    if(ch.over){play('end',.8);return;}
+    const fell=ch.fx.some(f=>f.fell),sailed=ch.L.dEvac>=.5;
+    if(fell){play('groan',.75);play('alarm',1.2);}
+    if(sailed)play('horn',fell?2.1:.85);
+    if(ch.fx.some(f=>f.clear))play('clear',fell||sailed?2.6:.8);
+  }
+
+  /* --- first-time tips: three steps on the first turn, remembered once finished or hidden --- */
+  let tip=null;
+  try{if(!localStorage.getItem(TIP_KEY))tip={step:0,turn:null};}catch(e){}
+  function tipDone(){
+    tip=null;try{localStorage.setItem(TIP_KEY,'1');}catch(e){}
+    for(const t of document.querySelectorAll('.feel-tipped'))t.classList.remove('feel-tipped');
+    const h=$('#feelhint');if(h){const had=h.contains(document.activeElement);h.remove();if(had){const n=$('#nodes [tabindex="0"]');if(n)n.focus({preventScroll:true});}}
+  }
+  function tips(){
+    if(!tip||!S||!S.nodes)return;
+    if(!UI.setup){if(tip.turn==null){if(S.turn>0){tipDone();return;}tip.turn=S.turn;}else if(S.turn!==tip.turn||S.over){tipDone();return;}}
+    if(tip.step===0&&UI.sel)tip.step=1;
+    if(tip.step<=1&&UI.undo.length)tip.step=2;
+    const org=S.origin&&P[S.origin]?S.origin:'kessler';
+    const STEPS=[
+      {txt:`Pick a place on the map to see what you can order there. The outbreak starts at <b>${esc(name(org))}</b>.`,tgt:`#nodes [data-node="${org}"]`},
+      {txt:`These are your orders for <b>${esc(name(UI.sel||'aldermoor'))}</b>. Each one uses up orders from the row at the top. <b>Evacuate civilians</b> sends a refugee column toward the nearest open port.`,tgt:'[data-act="evac"]'},
+      {txt:'Spend the rest of your orders, then press <b>End turn</b> (or E). The red arrows show where each horde will move when 12 hours pass.',tgt:'.endturn'},
+    ];
+    const s=STEPS[tip.step];
+    let h=$('#feelhint');
+    if(!h){h=document.createElement('div');h.id='feelhint';h.className='feel-hint';h.setAttribute('role','note');h.setAttribute('aria-label','Tip');
+      h.innerHTML='<p class="feel-hint-n"></p><p class="feel-hint-t"></p><div class="feel-hint-b"><button class="btn" data-feel="tipnext"></button><button class="btn" data-feel="tipskip">Hide tips</button></div>';
+      document.body.appendChild(h);}
+    h.hidden=!!(UI.setup||blocking()||UI.mode);
+    h.classList.toggle('phone',matchMedia('(max-width:700px)').matches);
+    h.querySelector('.feel-hint-n').textContent=`Tip ${tip.step+1} of 3`;
+    const tt=h.querySelector('.feel-hint-t');if(tt.dataset.k!==s.txt){tt.innerHTML=s.txt;tt.dataset.k=s.txt;}
+    h.querySelector('[data-feel="tipnext"]').textContent=tip.step===2?'Got it':'Next tip';
+    for(const t of document.querySelectorAll('.feel-tipped'))t.classList.remove('feel-tipped');
+    if(!h.hidden)for(const t of document.querySelectorAll(s.tgt))t.classList.add('feel-tipped');
+  }
+
+  /* --- small polish: mute button, end-turn label and pulse --- */
+  const SPK='<path d="M3 7h3l4-3v12l-4-3H3z" fill="currentColor"/>';
+  const ICON_ON=`<svg viewBox="0 0 20 20" aria-hidden="true">${SPK}<path d="M13 7a4 4 0 0 1 0 6M15 5a7 7 0 0 1 0 10" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`;
+  const ICON_OFF=`<svg viewBox="0 0 20 20" aria-hidden="true">${SPK}<path d="M13 7l5 6M18 7l-5 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`;
+  function muteBtn(){
+    const top=$('#top');if(!top||!top.firstElementChild)return;
+    let b=$('#feelmute');
+    if(!b){b=document.createElement('button');b.id='feelmute';b.className='btn icon feel-mute';b.dataset.feel='mute';b.setAttribute('aria-label','Sound');
+      const box=top.querySelector('.topbtns')||top;box.insertBefore(b,box.firstChild);}
+    b.setAttribute('aria-pressed',String(!!PREFS.sound));b.title=`Sound ${PREFS.sound?'on':'off'} (M)`;b.innerHTML=PREFS.sound?ICON_ON:ICON_OFF;
+  }
+  function endBtns(){
+    const live=!S.over&&!blocking()&&!UI.mode;
+    const left=live&&S.cp>0?`${S.cp} order${S.cp===1?'':'s'} unused`:'';
+    for(const b of document.querySelectorAll('.endturn')){
+      b.classList.toggle('feel-ready',live&&S.cp<=0);
+      if(b.closest('#top')){const sm=b.querySelector('small');if(sm)sm.textContent=left?`${left} · E`:'12 hours pass · E';}
+      else{let sm=b.querySelector('small.feel-unused');if(left){if(!sm){sm=document.createElement('small');sm.className='feel-unused';b.appendChild(sm);}sm.textContent=left;}else if(sm)sm.remove();}
+    }
+  }
+  const toggle=safe(()=>{
+    PREFS.sound=!PREFS.sound;savePrefs();
+    if(PREFS.sound){armed=true;ctx();if(out)out.gain.setTargetAtTime(VOL,ac.currentTime,.05);play('click');}
+    else if(out)out.gain.setTargetAtTime(0,ac.currentTime,.05);
+    muteBtn();say(PREFS.sound?'Sound on.':'Sound off.');
+  });
+  let lastEv=null;
+  function decorate(){
+    if(!S||!S.nodes)return;
+    muteBtn();endBtns();tips();
+    if(ac)tension();
+    const ev=S.events[0]||null;if(ev&&ev!==lastEv&&!S.over)play('wire');lastEv=ev;
+    if(pending){const ch=pending;pending=null;
+      if(!ch.over){floaters(ch.fx);curtain();setTimeout(safe(()=>toast(ch)),reduced()?0:450);}
+      turnSounds(ch);}
+  }
+
+  /* --- listeners: arm audio on the first gesture, sound each order, M toggles sound --- */
+  let pre=null;
+  const look=safe(()=>S&&S.nodes?{seed:S.seed,turn:S.turn,cp:S.cp,cut:S.cut.length,sorties:S.sorties,undo:UI.undo.length}:null);
+  // compare the state before and after the game's own handler ran; returns true when it has played a sound
+  const after=safe(()=>{
+    const p=pre,now=look();pre=null;if(!p||!now)return false;
+    if(p.seed!==now.seed||p.turn!==now.turn)return true; // new campaign or new turn: sounded elsewhere
+    if(now.cut>p.cut||now.sorties<p.sorties){play('order');play('boom',.08);return true;}
+    if(now.cp<p.cp||now.undo>p.undo){play('order');return true;}
+    if(now.undo<p.undo){play('undo');return true;}
+    return false;
+  });
+  addEventListener('pointerdown',arm,true);
+  document.addEventListener('keydown',e=>{if(!e.metaKey&&!e.ctrlKey&&!e.altKey)arm();pre=look();},true);
+  document.addEventListener('click',()=>{pre=look();},true);
+  document.addEventListener('click',e=>{
+    const f=e.target.closest&&e.target.closest('[data-feel]');
+    if(f){pre=null;const k=f.dataset.feel;
+      if(k==='mute')toggle();
+      else if(k==='tipskip'){play('click');tipDone();}
+      else if(k==='tipnext'&&tip){play('click');if(tip.step>=2)tipDone();else{tip.step++;safe(tips)();}}
+      return;}
+    if(!after()&&e.target.closest&&e.target.closest('[data-act],[data-node],[data-edge]'))play('click');
+  });
+  document.addEventListener('keydown',e=>{
+    if(e.target.matches&&e.target.matches('input')){pre=null;return;}
+    if(!e.metaKey&&!e.ctrlKey&&!e.altKey&&(e.key==='m'||e.key==='M')){pre=null;toggle();return;}
+    if(e.key==='Enter'||e.key===' ')pre=null; // re-dispatched as a click, which sounds itself
+    else after();
+  });
+  return {endTurn:endTurnFx,decorate:safe(decorate)};
+})();
+
 /* ---------- boot ---------- */
 function start(data){
   buildTerrain();
   S=(data&&data.S&&data.S.nodes&&data.S.caps)?data.S:load();
   UI=Object.assign({sel:null,mode:null,undo:[],setup:null,help:false,showReport:false},(data&&data.UI)||{});
+  const had=!!S;
   if(!S){newGame({});openSetup(false);}
+  const link=!(data&&data.UI)&&readLink();
+  if(link){UI.setup={...link,canCancel:had&&!S.over};try{history.replaceState(null,'',location.href.split('#')[0]);}catch(e){}}
   render();
 }
 window.claude?.hot?.snapshot?.(()=>({S,UI}));
