@@ -7,7 +7,7 @@ function danger(id) { const s = state(id); return (s === 'holding' || s === 'los
 // Generic configurable bot.
 function bot(o = {}) {
   o = Object.assign({ evac: true, evacPorts: false, evacCapital: true, keepA: 3, keepB: 1, fortify: true, fortCap: 3, troops: true,
-    militia: false, strike: false, airdrop: false, threatOnly: true, extra: null, pre: null, evacTurnMin: 0 }, o);
+    militia: false, strike: false, airdrop: false, airlift: false, threatOnly: true, extra: null, pre: null, evacTurnMin: 0 }, o);
   return function (t) {
     if (o.pre) o.pre(t);
     // 1. evacuate the most endangered populated places
@@ -15,6 +15,11 @@ function bot(o = {}) {
       const c = IDS().filter(id => !N(id).evac && N(id).pop >= 1 && !fallen(id) && (o.evacPorts || P[id].type !== 'port') && (o.evacCapital || id !== 'aldermoor') && (!o.threatOnly || danger(id) > 0))
         .sort((a, b) => danger(b) - danger(a) || N(b).pop - N(a).pop);
       for (const id of c) { if (S.cp < 2) break; orderEvac(id); }
+    }
+    // 1b. helicopters for people with no way out: cut off from every port, or about to be overrun
+    if (o.airlift && typeof orderAirlift === 'function') {
+      const c = IDS().filter(id => P[id].type !== 'port' && !fallen(id) && N(id).pop >= 3 && (state(id) === 'losing' || !routeToPort(id))).sort((a, b) => N(b).pop - N(a).pop);
+      for (const id of c) { if (S.cp < 2 || S.sorties < 1) break; orderAirlift(id); }
     }
     // 2. rail spare troops to the most populous threatened place
     if (o.troops) {
@@ -126,7 +131,13 @@ Object.assign(STRATS, {
 Object.assign(STRATS, {
   cK_cure0: { orders: bot({ evacPorts: true, pre: t => { S.flags.cure = 1; if (t === 0) CUTK(); } }) },
   bEP_cure0: { orders: bot({ evacPorts: true, pre: t => { S.flags.cure = 1; } }), ev: { origin: 1 } },
-  bEP: { orders: bot({ evacPorts: true }), ev: { origin: 1 } },
+  bEP: { orders: bot({ evacPorts: true, airlift: true }), ev: { origin: 1 } },
+  bEP_noLift: { orders: bot({ evacPorts: true }), ev: { origin: 1 } },
+  // Airlift exploits: every sortie on Kessler on turn 0, or every sortie on the biggest crowds as early as possible.
+  liftK: { orders: bot({ evacPorts: true, pre: t => { if (t === 0) for (let i = 0; i < 5; i++) orderAirlift('kessler'); } }), ev: { origin: 1 } },
+  liftSpam: { orders: bot({ evacPorts: true, pre: t => { for (const id of IDS().filter(id => P[id].type !== 'port' && N(id).pop >= 6 && !fallen(id)).sort((a, b) => N(b).pop - N(a).pop)) { if (S.sorties < 1 || S.cp < 1) break; orderAirlift(id); } } }), ev: { origin: 1 } },
+  // Night-aware: evacuate only by day, fortify and reinforce by night.
+  bEP_dayEvac: { orders: t => (t % 2 ? bot({ evacPorts: true, airlift: true, evac: false }) : bot({ evacPorts: true, airlift: true }))(t), ev: { origin: 1 } },
 });
 for (const d of [1, 2, 4, 8]) { const f = bot({ evacPorts: true }); STRATS['bEP_delay' + d] = { ev: { origin: 1 }, orders: t => { if (t >= d) f(t); } };
   const g = bot({ evacPorts: true, pre: t => { if (t === d) CUTK(); } }); STRATS['cutK_at' + d] = { orders: t => { if (t >= d) g(t); } }; }
