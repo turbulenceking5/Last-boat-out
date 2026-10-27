@@ -59,10 +59,11 @@
     w = nw; h = nh;
     renderer.setSize(w, h, false);
     camera.aspect = w / Math.max(1, h);
-    // pull back on narrow boxes so the whole diorama fits
-    const dist = 15.5 + Math.max(0, 2 - camera.aspect) * 7;
-    camera.position.set(0, dist * 0.62, dist * 0.78);
-    camera.lookAt(0, 0.5, 0);
+    // A lowish three-quarter view: the round slab fills a wide panel and people show their sides.
+    // Pull back on narrow boxes so the whole diorama fits.
+    const dist = 14.2 + Math.max(0, 2 - camera.aspect) * 7;
+    camera.position.set(0, dist * 0.53, dist * 0.85);
+    camera.lookAt(0, 0.45, 0.7);
     camera.updateProjectionMatrix();
   }
 
