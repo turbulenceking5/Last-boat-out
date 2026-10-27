@@ -13,6 +13,7 @@ The City is a separate page at `city/`. It is written in TypeScript and loads Th
 | `city/src/sim.ts` | The simulation: one fixed step at a time, plus every player order |
 | `city/src/view.ts` | The Three.js scene: ground texture, instanced buildings and people, vehicles, aircraft, effects, camera and picking |
 | `city/src/audio.ts` | Synthesised Web Audio, driven by events the simulation records |
+| `city/src/fx.ts` | Effects for abilities and feedback: floating text (`G.pops`), rank stars, grenades and shells in flight (`G.shells`), an APC's flare, rings round held blocks. Called once a frame from `drawFrame` |
 | `city/src/ui.ts` | The HTML interface and all input |
 | `city/src/main.ts` | Boot and the main loop; exposes `window.City` for tests |
 | `city/build.js` | Joins the compiled files into one script |
@@ -39,7 +40,7 @@ input (ui.ts) ──orders──▶ sim.ts ──mutates──▶ G ◀──rea
 
 - The simulation never touches the DOM or Three.js. That lets `tests/city.js` run it flat out, and keeps rendering optional.
 - The view reads `G` every frame and keeps its own meshes in step: maps keyed by unit, evacuation point, gunship, strike and mission.
-- Sound and camera shake are recorded by the simulation (`G.sfx`, `G.shake`) and played by the view. When nobody drains `G.sfx`, as in the tests, it is capped at 300 entries.
+- Sound, camera shake and floating text are recorded by the simulation (`G.sfx`, `G.shake`, `G.pops`) and played by the view and `fx.ts`. A pending decision (`G.decision`) makes `main.ts` stop stepping and show the decision card. When nobody drains `G.sfx`, as in the tests, it is capped at 300 entries.
 
 ## The main loop (`main.ts`)
 
@@ -54,4 +55,4 @@ While an overlay (start, help or end) is up, the simulation doesn't run.
 
 ## Test hooks
 
-`window.City` exposes `G`, `tick`, `order`, `moveUnits`, `evacuateBlock`, `sendToBlock`, `UI`, `showOverlay`, `reset(seed)` and `look(x, z, dist)`. The tests and the screenshot scripts use these.
+`window.City` exposes `G`, `tick`, `order`, `moveUnits`, `evacuateBlock`, `sendToBlock`, `useAbility`, `reinforce`, `choose`, `UI`, `showOverlay`, `reset(seed)` and `look(x, z, dist)`. The tests and the screenshot scripts use these.
