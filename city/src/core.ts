@@ -290,12 +290,14 @@ interface Game {
   lastCall: number;         // last-ship countdown: the last second announced
   hordeTarget: number;      // the cell the great horde marches on
   ace: { name: string; kills: number; rank: number } | null;  // the unit with the most kills, for the end screen
+  deaths: { streets: number; queues: number; homes: number; fire: number }; // where people died (fire: your own), for the end screen
+  lateSaid: boolean;        // the rooftop survivors of the late game have been announced
 }
 
 /** One special ability per kind of unit, used with F or the button in the unit panel. */
 const ABILITY: Record<UnitKind, { name: string; cd: number; range: number; r: number; dmg: number; desc: string }> = {
-  militia:  { name: 'Molotovs', cd: 30, range: 6, r: 1.6, dmg: 3, desc: 'Petrol bombs on the thickest knot of infected nearby.' },
-  infantry: { name: 'Grenades', cd: 20, range: 8, r: 1.9, dmg: 4, desc: 'Grenades on the thickest knot of infected in range. Never thrown where civilians are.' },
+  militia:  { name: 'Molotovs', cd: 30, range: 6, r: 1.6, dmg: 3, desc: 'Two petrol bombs on the thickest knot of infected within 6 cells.' },
+  infantry: { name: 'Grenades', cd: 20, range: 8, r: 1.9, dmg: 4, desc: 'Two grenades on the thickest knot of infected within 8 cells. Civilians are never hurt.' },
   apc:      { name: 'Flare and siren', cd: 45, range: 0, r: 0, dmg: 0, desc: 'For 12 seconds the infected within about 26 cells come for the APC instead of anyone else. Drive, and they follow.' },
   tank:     { name: 'HE barrage', cd: 40, range: 14, r: 2.4, dmg: 8, desc: 'Four high-explosive shells on the thickest knot of infected within 14 cells.' },
 };

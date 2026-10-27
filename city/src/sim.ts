@@ -9,6 +9,7 @@ const EMIT_EVERY = 2;     // an evacuating block lets one figure's worth of peop
 const WAVE_AT = 8 * 60;   // the great horde reaches the eastern edge
 const WAVE_SIZE = 220;
 const APC_CAP = 60;
+const LATE_AT = 6 * 60;   // from here, hidden survivors signal from the rooftops more often
 const fieldCache = new Map<number, Float32Array>();
 const doorField = new Float32Array(W * H);
 let panicSaid = 0, busSaid = 0, crowdSaid = 0; // routine messages are rationed so the log stays readable
@@ -26,7 +27,7 @@ function newGame(seed: number) {
     over: null, log: [], nextId: 1, sparks: [150, 320, 500], zedSpeed: 1, changed: true,
     missions: [], nextMission: 55, waveAt: WAVE_AT, sfx: [], shake: 0, alert: null,
     shells: [], pops: [], decision: null, decisions: DECISION_TIMES.map(d => ({ ...d })), hqOrders: HQ_ORDERS.map(o => ({ ...o, done: false })),
-    sealed: false, calmUntil: 0, waveSize: WAVE_SIZE, troopsHome: 0, ordered: false, usedAbility: false, lastCall: 0, hordeTarget: -1, ace: null,
+    sealed: false, calmUntil: 0, waveSize: WAVE_SIZE, troopsHome: 0, ordered: false, usedAbility: false, lastCall: 0, hordeTarget: -1, ace: null, deaths: { streets: 0, queues: 0, homes: 0, fire: 0 }, lateSaid: false,
   };
   fieldCache.clear();
   zFieldT = 0; panicSaid = 0; busSaid = 0; crowdSaid = 0; barkSaid = 0; waveWarned = false;
@@ -50,7 +51,7 @@ function outbreak(b: Block, n: number) {
     spawnZed(ci(d) + 0.2 + G.rnd() * 0.6, cj(d) + 0.2 + G.rnd() * 0.6, false);
   }
   const lost = Math.min(b.pop, n * PER_AGENT);
-  b.pop -= lost; G.stats.dead += lost;
+  b.pop -= lost; G.stats.dead += lost; G.deaths.homes += lost;
   b.evacuating = true;
 }
 
@@ -309,7 +310,7 @@ function updateZed(z: Zed, dt: number) {
   if (z.cd <= 0) {
     const v = cHash.nearest(z.x, z.z, 0.75, c => !c.gone);
     if (v) {
-      v.gone = true; G.stats.dead += PER_AGENT; spawnZed(v.x, v.z); z.cd = 0.9; return;
+      v.gone = true; G.stats.dead += PER_AGENT; G.deaths.streets += PER_AGENT; spawnZed(v.x, v.z); z.cd = 0.9; return;
     }
     for (const ms of G.missions) {
       if ((ms.kind !== 'survivors' && (ms.kind !== 'vip' || ms.carrier > 0)) || ms.people <= 0 || dist2(ms.x, ms.z, z.x, z.z) > 1.4) continue;
@@ -337,7 +338,7 @@ function updateZed(z: Zed, dt: number) {
       z.cd = 1;
       if (G.t < blk.convertT) return;
       blk.convertT = G.t + CONVERT_EVERY;
-      blk.pop -= PER_AGENT; G.stats.dead += PER_AGENT;
+      blk.pop -= PER_AGENT; G.stats.dead += PER_AGENT; G.deaths.homes += PER_AGENT;
       spawnZed(z.x + (G.rnd() - 0.5), z.z + (G.rnd() - 0.5));
       if (blk.pop <= 0 && !blk.fallen) { blk.fallen = true; G.changed = true; say(`${blk.name} has been overrun.`, 'bad'); }
       return;
@@ -347,7 +348,7 @@ function updateZed(z: Zed, dt: number) {
         z.cd = 0.9;
         if (G.t < e.biteT) return;
         e.biteT = G.t + 0.8;
-        e.queue -= PER_AGENT; G.stats.dead += PER_AGENT; spawnZed(z.x, z.z);
+        e.queue -= PER_AGENT; G.stats.dead += PER_AGENT; G.deaths.queues += PER_AGENT; spawnZed(z.x, z.z);
         if (G.t > crowdSaid) { crowdSaid = G.t + 20; say(`The infected are among the crowd at ${e.kind === 'harbor' ? 'the harbour' : 'a bus stop'}.`, 'bad'); }
         return;
       }
@@ -450,14 +451,14 @@ function updateStrike(s: Strike, dt: number) {
     G.booms.push({ x, z, t: 0.9 + k * 0.05, size: 2.6 });
     G.sfx.push({ k: 'boom', x, z });
     zHash.near(x, z, 2.4, zd => { hitZed(zd, 99, null); });
-    cHash.near(x, z, 2.4, c => { if (!c.gone) { c.gone = true; G.stats.dead += PER_AGENT; } });
+    cHash.near(x, z, 2.4, c => { if (!c.gone) { c.gone = true; G.stats.dead += PER_AGENT; G.deaths.fire += PER_AGENT; } });
     for (const u of G.units) for (const m of u.members) if (dist2(m.x, m.z, x, z) < 2.4 * 2.4) m.hp -= UNITS[u.kind].vehicle ? 20 : 4;
   }
   // buildings on the line take casualties too
   for (const b of G.blocks) {
     if (b.pop <= 0 || dist2(b.x0 + 3, b.z0 + 3, s.x, s.z) > 30) continue;
     const lost = Math.round(b.pop * 0.15 / PER_AGENT) * PER_AGENT;
-    if (lost > 0) { b.pop -= lost; G.stats.dead += lost; say(`The air strike killed ${lost} people in ${b.name}.`, 'bad'); }
+    if (lost > 0) { b.pop -= lost; G.stats.dead += lost; G.deaths.fire += lost; say(`The air strike killed ${lost} people in ${b.name}.`, 'bad'); }
   }
   s.bombs = 0;
   G.shake = 1;
@@ -557,8 +558,11 @@ const VIPS = ["Dr Ilse Varga, St Brennan's chief epidemiologist", 'Harbourmaster
 
 function updateMissions(dt: number) {
   G.nextMission -= dt;
-  if (G.nextMission <= 0 && G.missions.length < 2 && G.t < GAME_SECONDS - 75) {
-    G.nextMission = 55 + G.rnd() * 25;
+  // late in the night, people who hid come out and signal from the rooftops: missions come thicker and faster
+  const late = G.t >= LATE_AT;
+  if (late && !G.lateSaid) { G.lateSaid = true; say('As the streets empty, people who hid are signalling from rooftops all over the city. Get them out before the last ship.', 'key'); }
+  if (G.nextMission <= 0 && G.missions.length < (late ? 3 : 2) && G.t < GAME_SECONDS - 75) {
+    G.nextMission = late ? 26 + G.rnd() * 14 : 55 + G.rnd() * 25;
     spawnMission();
   }
   for (const m of G.missions) {
@@ -645,9 +649,9 @@ function updateVip(m: Mission) {
 }
 
 function spawnMission() {
-  const r = G.rnd();
-  if (r < 0.15 && spawnHold()) return;
-  const kind: Mission['kind'] = r < 0.3 ? 'vip' : r < 0.68 ? 'survivors' : 'crate';
+  const r = G.rnd(), late = G.t >= LATE_AT;
+  if (r < 0.15 && !late && spawnHold()) return;
+  const kind: Mission['kind'] = r < 0.3 ? 'vip' : r < (late ? 0.8 : 0.68) ? 'survivors' : 'crate';
   // somewhere on the streets, away from the fort and the evacuation points
   for (let tries = 0; tries < 60; tries++) {
     const i = 3 + Math.floor(G.rnd() * (W - 6)), j = 3 + Math.floor(G.rnd() * (QUAY_Z - 6)), c = idx(i, j);
@@ -656,7 +660,7 @@ function spawnMission() {
     if (dist2(x, z, ci(G.hq), cj(G.hq)) < 200 || G.evacs.some(e => dist2(e.x, e.z, x, z) < 64)) continue;
     const near = G.blocks.reduce((a, b) => dist2(b.x0 + 3, b.z0 + 3, x, z) < dist2(a.x0 + 3, a.z0 + 3, x, z) ? b : a);
     const m: Mission = {
-      id: G.nextId++, kind, x, z, t: kind === 'crate' ? 60 : 75, people: kind === 'survivors' ? 60 + Math.floor(G.rnd() * 4) * 10 : kind === 'vip' ? PER_AGENT : 0,
+      id: G.nextId++, kind, x, z, t: kind === 'crate' ? 60 : 75, people: kind === 'survivors' ? (late ? 80 : 60) + Math.floor(G.rnd() * (late ? 7 : 4)) * 10 : kind === 'vip' ? PER_AGENT : 0,
       reward: kind === 'survivors' ? 400 : kind === 'vip' ? 800 : 700, biteT: 0, prog: 0, need: 0, block: -1, carrier: 0, who: '',
     };
     if (kind === 'survivors') G.stats.total += m.people; // people nobody knew were there
@@ -685,7 +689,10 @@ function spawnHold(): boolean {
 
 // ---- abilities ----
 
-/** The thickest knot of infected within range of (x, z), with at least 3 inside radius r, avoiding civilians if asked. */
+/**
+ * The thickest knot of infected within range of (x, z) and at least minD away, with 3 or more inside radius r.
+ * Thrown weapons and shells never hurt civilians: the crews pick their moment.
+ */
 function clusterTarget(x: number, z: number, range: number, r: number, minD: number): { x: number; z: number; n: number } | null {
   const cands: Zed[] = [];
   zHash.near(x, z, range, zd => { if (zd.hp > 0 && zd.rise <= 0 && dist2(zd.x, zd.z, x, z) >= minD * minD) cands.push(zd); });
@@ -696,9 +703,6 @@ function clusterTarget(x: number, z: number, range: number, r: number, minD: num
     let n = 0;
     zHash.near(c.x, c.z, r, zd => { if (zd.hp > 0) n++; });
     if (n < 3 || (best && n <= best.n)) continue;
-    if (cHash.nearest(c.x, c.z, r + 0.6, cv => !cv.gone)) continue;
-    if (G.evacs.some(e => e.queue > 0 && dist2(e.x, e.z, c.x, c.z) < (r + 2.5) ** 2)) continue;
-    if (G.missions.some(m => (m.kind === 'survivors' || (m.kind === 'vip' && !m.carrier)) && m.people > 0 && dist2(m.x, m.z, c.x, c.z) < (r + 1.5) ** 2)) continue;
     best = { x: c.x, z: c.z, n };
   }
   return best;
@@ -716,12 +720,13 @@ function useAbility(u: Unit): string | null {
   if (G.over) return 'The campaign is over.';
   const a = ABILITY[u.kind];
   if (u.ab > 0) return `${u.name}: ${a.name.toLowerCase()} ready in ${Math.ceil(u.ab)}s.`;
+  zHash.build(G.zeds); // called between steps: the hash may be stale
   if (u.kind === 'apc') {
     u.lureT = LURE_SECONDS; zFieldT = 0;
     G.sfx.push({ k: 'siren', x: u.x, z: u.z });
   } else {
     const tank = u.kind === 'tank', tgt = clusterTarget(u.x, u.z, a.range, a.r, tank ? 3 : 2);
-    if (!tgt) return `${u.name}: no clear target. ${a.name} need at least 3 infected together within ${a.range} cells, away from civilians.`;
+    if (!tgt) return `${u.name}: no target for ${a.name.toLowerCase()}: it needs 3 or more infected together within ${a.range} cells.`;
     const n = tank ? 4 : 2, dur = tank ? 0.5 : 0.8;
     for (let k = 0; k < n; k++) {
       const jx = k ? (G.rnd() - 0.5) * a.r * 1.2 : 0, jz = k ? (G.rnd() - 0.5) * a.r * 1.2 : 0;
@@ -744,7 +749,6 @@ function updateShells(dt: number) {
     G.booms.push({ x: s.x, z: s.z, t: s.big ? 0.9 : 0.5, size: s.big ? 2.6 : 1.6 });
     G.sfx.push({ k: 'boom', x: s.x, z: s.z });
     zHash.near(s.x, s.z, s.r, zd => { hitZed(zd, s.dmg, u); });
-    cHash.near(s.x, s.z, s.r * 0.7, c => { if (!c.gone) { c.gone = true; G.stats.dead += PER_AGENT; } });
   }
   G.shells = G.shells.filter(s => s.t > 0);
 }
@@ -769,6 +773,7 @@ function reinforce(u: Unit): string | null {
   const cost = reinforceCost(u);
   if (!cost) return `${u.name} is at full strength.`;
   if (!nearSupply(u)) return `Bring ${u.name} to Fort Aldermoor or an evacuation point to reinforce.`;
+  zHash.build(G.zeds); // called between steps: the hashes may be from before the last clean-up, or another game
   if (zHash.nearest(u.x, u.z, 5, z => z.hp > 0 && z.rise <= 0)) return `${u.name} is in contact. Pull back first.`;
   if (G.funds < cost) return `Needs $${cost}. You have $${Math.floor(G.funds)}.`;
   const s = UNITS[u.kind];
