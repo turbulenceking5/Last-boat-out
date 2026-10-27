@@ -10,5 +10,5 @@
     "outDir": "build",
     "types": []
   },
-  "files": ["src/env.d.ts", "src/core.ts", "src/citygen.ts", "src/sim.ts", "src/view.ts", "src/audio.ts", "src/ui.ts", "src/main.ts"]
+  "files": ["src/env.d.ts", "src/core.ts", "src/citygen.ts", "src/sim.ts", "src/view.ts", "src/audio.ts", "src/fx.ts", "src/ui.ts", "src/main.ts"]
 }

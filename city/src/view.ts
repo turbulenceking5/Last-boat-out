@@ -530,5 +530,6 @@ function drawFrame(time: number, dt: number, sel: Unit[], selBlock: Block | null
   drawSmoke(time);
   drawMarkers(sel, selBlock, place, time);
   placeCamera();
+  drawFx(time); // fx.ts: ability effects, floating text, rank stars
   V.renderer.render(V.scene, V.camera);
 }
