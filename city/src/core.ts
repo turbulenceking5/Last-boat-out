@@ -292,6 +292,7 @@ interface Game {
   ace: { name: string; kills: number; rank: number } | null;  // the unit with the most kills, for the end screen
   deaths: { streets: number; queues: number; homes: number; fire: number }; // where people died (fire: your own), for the end screen
   lateSaid: boolean;        // the rooftop survivors of the late game have been announced
+  vips: number;             // VIP missions so far, so the same person doesn't turn up twice running
 }
 
 /** One special ability per kind of unit, used with F or the button in the unit panel. */
@@ -302,5 +303,5 @@ const ABILITY: Record<UnitKind, { name: string; cd: number; range: number; r: nu
   tank:     { name: 'HE barrage', cd: 40, range: 14, r: 2.4, dmg: 8, desc: 'Four high-explosive shells on the thickest knot of infected within 14 cells.' },
 };
 /** Kills needed for each rank. Each rank is more accurate, fires faster and recharges its ability sooner. */
-const RANKS = [{ name: 'Rookie', kills: 0 }, { name: 'Veteran', kills: 30 }, { name: 'Elite', kills: 90 }];
+const RANKS = [{ name: 'Rookie', kills: 0 }, { name: 'Veteran', kills: 50 }, { name: 'Elite', kills: 150 }];
 const LURE_SECONDS = 12, LURE_PULL = 8;

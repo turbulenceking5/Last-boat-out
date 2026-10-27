@@ -182,18 +182,18 @@ function showOverlay(which: '' | 'start' | 'help' | 'end' | 'decide') {
       <p class="body">The outbreak started at St Brennan's Hospital on the east side. You hold Fort Aldermoor in the north-west and the harbour in the south. The last ship sails in 12 minutes. Get as many people out as you can.</p>
       <ul><li>People shelter at home until you order a block to evacuate, or the infected come close and they panic. Evacuees walk to the nearest evacuation point and wait for a ship or bus.</li>
       <li>The infected hunt the nearest people: anyone in the streets, crowds at the evacuation points, your troops, and blocks they can break into.</li>
-      <li>Your troops fire at anything in range on their own. Money comes in steadily, plus a bounty for every kill and every person evacuated.</li>
+      <li>Troops fire on their own. <b>Each unit also has an ability</b> (F): grenades, molotovs, a tank barrage, or an APC's siren that pulls the infected after it. Units earn <b>ranks</b> with kills; reinforce them (R) at the fort or an evacuation point.</li>
       <li><b>APCs rescue people:</b> select one and tap a block to load up to 60, then tap near an evacuation point to drop them off.</li>
-      <li><b>Every unit has a special ability</b> (F): infantry throw grenades, militia molotovs, tanks fire an HE barrage, and an APC's flare and siren pull the infected after it. Units earn <b>ranks</b> with kills; reinforce them (R) at the fort or an evacuation point to keep a veteran squad alive.</li>
-      <li><b>Missions</b> pop up on the map: supply drops, survivors on rooftops, a VIP to bring out, and blocks to hold while they barricade. Now and then command will ask you to <b>decide</b> something; the game waits for you.</li>
+      <li><b>Missions</b> pop up: supply drops, rooftop survivors, VIPs to bring out, blocks to hold. Now and then command asks you to <b>decide</b> something; the game waits for you.</li>
       <li>Watch for <b>runners</b> (fast, red shirts, go down easily) and <b>brutes</b> (huge, soak up fire, smash doors in). At minute 8 a great horde arrives from the east.</li>
       <li>Each figure stands for 10 people.</li></ul>${controls}
       <div class="btns"><button class="btn primary" data-act="${which === 'start' ? 'begin' : 'closehelp'}">${which === 'start' ? 'Take command' : 'Back to the city'}</button><a class="btn" href="../">The original game</a></div></div>`;
   } else {
-    const o = G.over!, s = G.stats;
+    const o = G.over!, s = G.stats, d = G.deaths, elsewhere = s.dead - d.streets - d.queues - d.homes - d.fire;
     ov.innerHTML = `<div class="card ${o.pct >= 30 ? '' : 'red'}"><span class="eyebrow">${o.why === 'time' ? 'The last ship has sailed' : 'The city is empty'}</span><h1>${esc(o.grade)}</h1>
       <p class="big">${o.pct.toFixed(0)}% of the city saved</p>
       <div class="stats"><div><b>${fmtPeople(s.evacuated)}</b><span>Evacuated</span></div><div><b>${fmtPeople(s.dead)}</b><span>Dead</span></div><div><b>${s.killed * PER_AGENT}</b><span>Infected destroyed</span></div><div><b>${s.unitsLost}</b><span>Units lost</span></div><div><b>${s.missions}</b><span>Missions done</span></div><div><b>${fmtPeople(s.ferried)}</b><span>Rescued by APC</span></div><div><b>${G.troopsHome}</b><span>Troops home</span></div><div><b>$${s.spent}</b><span>Spent</span></div></div>
+      <p class="note">Where people died: ${fmtPeople(G.deaths.streets)} in the streets, ${fmtPeople(G.deaths.queues)} waiting at evacuation points, ${fmtPeople(G.deaths.homes)} in their homes${G.deaths.fire ? `, ${fmtPeople(G.deaths.fire)} under your own air strikes` : ''}${elsewhere > 0 ? `, ${fmtPeople(elsewhere)} on rooftops, in APCs and among the militia` : ''}.</p>
       ${G.ace ? `<p class="note">Unit of the night: <b>${esc(G.ace.name)}</b>${G.ace.rank ? ` ${'★'.repeat(G.ace.rank)}` : ''}, ${G.ace.kills} kills${G.units.some(u => u.name === G.ace!.name) ? '' : ', lost in the fighting'}.</p>` : ''}
       <p class="note">Grades: 60% Saviour of the city, 45% An orderly withdrawal, 30% A bitter retreat.</p>
       <div class="btns"><button class="btn primary" data-act="again">Play again</button><a class="btn" href="../">The original game</a></div></div>`;

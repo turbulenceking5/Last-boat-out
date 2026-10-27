@@ -9,6 +9,8 @@
 | Move selected units | Click a street, or right-click anywhere | Tap a street |
 | Send selected APCs to load people | Click a block | Tap a block |
 | Send selected units to an evacuation point | Click near it | Tap near it |
+| Use a unit's ability, reinforce it | Its buttons in the unit panel | Same |
+| Answer a decision | Click an option | Tap an option |
 | Pan the camera | Drag | Drag with one finger |
 | Zoom | Scroll wheel | Pinch |
 | Buy or call in support | Click a button on the bottom bar, then click the map | Same, with taps |
@@ -20,6 +22,9 @@ A drag of more than a few pixels pans instead of selecting, so small taps are sa
 | Key | Does |
 |---|---|
 | 1 to 7 | Evac point, Militia, Infantry, APC, Tank, Air strike, Gunship |
+| F | Use the special ability of every selected unit |
+| R | Reinforce or repair the selected units (at the fort or an evacuation point) |
+| 1 to 3 | On a decision card: pick that option |
 | Ctrl+A (Cmd+A) | Select every unit |
 | Esc | Cancel placement; otherwise clear the selection |
 | Space | Pause or resume |

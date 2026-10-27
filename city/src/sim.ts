@@ -12,7 +12,7 @@ const APC_CAP = 60;
 const LATE_AT = 6 * 60;   // from here, hidden survivors signal from the rooftops more often
 const fieldCache = new Map<number, Float32Array>();
 const doorField = new Float32Array(W * H);
-let panicSaid = 0, busSaid = 0, crowdSaid = 0; // routine messages are rationed so the log stays readable
+let panicSaid = 0, busSaid = 0, crowdSaid = 0, apcSaid = 0, dropSaid = 0; // routine messages are rationed so the log stays readable
 let zFieldT = 0, unitCount: Record<UnitKind, number> = { militia: 0, infantry: 0, apc: 0, tank: 0 };
 
 function newGame(seed: number) {
@@ -27,10 +27,10 @@ function newGame(seed: number) {
     over: null, log: [], nextId: 1, sparks: [150, 320, 500], zedSpeed: 1, changed: true,
     missions: [], nextMission: 55, waveAt: WAVE_AT, sfx: [], shake: 0, alert: null,
     shells: [], pops: [], decision: null, decisions: DECISION_TIMES.map(d => ({ ...d })), hqOrders: HQ_ORDERS.map(o => ({ ...o, done: false })),
-    sealed: false, calmUntil: 0, waveSize: WAVE_SIZE, troopsHome: 0, ordered: false, usedAbility: false, lastCall: 0, hordeTarget: -1, ace: null, deaths: { streets: 0, queues: 0, homes: 0, fire: 0 }, lateSaid: false,
+    sealed: false, calmUntil: 0, waveSize: WAVE_SIZE, troopsHome: 0, ordered: false, usedAbility: false, lastCall: 0, hordeTarget: -1, ace: null, deaths: { streets: 0, queues: 0, homes: 0, fire: 0 }, lateSaid: false, vips: 0,
   };
   fieldCache.clear();
-  zFieldT = 0; panicSaid = 0; busSaid = 0; crowdSaid = 0; barkSaid = 0; waveWarned = false;
+  zFieldT = 0; panicSaid = 0; busSaid = 0; crowdSaid = 0; apcSaid = 0; dropSaid = 0; barkSaid = 0; waveWarned = false;
   unitCount = { militia: 0, infantry: 0, apc: 0, tank: 0 };
   generateCity(seeded(20261027)); // the same streets every game; the outbreak and its timing vary
   G.stats.total = G.blocks.reduce((a, b) => a + b.popMax, 0);
@@ -225,7 +225,7 @@ function tick(dt: number) {
   if (G.pops.length > 60) G.pops.splice(0, G.pops.length - 60);
 
   if (G.t >= GAME_SECONDS) finish('time');
-  else if (G.t > 5 && G.blocks.every(b => b.pop <= 0) && !G.civs.length && G.evacs.every(e => e.queue <= 0)) finish('empty');
+  else if (G.t > 5 && G.blocks.every(b => b.pop <= 0) && !G.civs.length && G.evacs.every(e => e.queue <= 0) && !G.missions.some(m => m.people > 0) && !G.units.some(u => u.cargo > 0)) finish('empty');
 }
 
 /** Beyond this the infected wander instead of hunting. */
@@ -521,14 +521,17 @@ function apcCargo(u: Unit, dt: number) {
   u.loadT -= dt;
   if (u.loadT > 0) return;
   u.loadT = 0.5;
-  if (u.cargo > 0) {
-    for (const e of G.evacs) if (dist2(e.x, e.z, u.x, u.z) < 12) {
+  // beside an evacuation point, let people off; don't load there, since anyone close by can walk to it
+  const e = G.evacs.find(e => dist2(e.x, e.z, u.x, u.z) < 12);
+  if (e) {
+    if (u.cargo > 0) {
       e.queue += u.cargo; G.stats.ferried += u.cargo;
-      say(`${u.name} drops ${u.cargo} people at ${e.kind === 'harbor' ? 'the harbour' : 'the evacuation point'}.`, 'good');
+      if (G.t > dropSaid) { dropSaid = G.t + 15; say(`${u.name} drops ${u.cargo} people at ${e.kind === 'harbor' ? 'the harbour' : 'the evacuation point'}.`, 'good'); }
+      G.pops.push({ x: u.x, z: u.z, text: `${u.cargo} dropped off`, kind: 'good' });
       G.sfx.push({ k: 'chime', x: u.x, z: u.z });
       u.cargo = 0;
-      return;
     }
+    return;
   }
   if (u.cargo >= APC_CAP) return;
   const i0 = Math.floor(u.x), j0 = Math.floor(u.z);
@@ -538,7 +541,7 @@ function apcCargo(u: Unit, dt: number) {
     if (b < 0 || G.blocks[b].pop <= 0) continue;
     const blk = G.blocks[b], take = Math.min(PER_AGENT, blk.pop, APC_CAP - u.cargo);
     blk.pop -= take; u.cargo += take;
-    if (u.cargo >= APC_CAP) say(`${u.name} is full: ${u.cargo} people aboard. Drive them to an evacuation point.`, 'key');
+    if (u.cargo >= APC_CAP) { G.pops.push({ x: u.x, z: u.z, text: 'Full: 60 aboard', kind: 'key' }); if (G.t > apcSaid) { apcSaid = G.t + 20; say(`${u.name} is full: ${u.cargo} people aboard. Drive them to an evacuation point.`, 'key'); } }
     return;
   }
 }
@@ -664,7 +667,7 @@ function spawnMission() {
       reward: kind === 'survivors' ? 400 : kind === 'vip' ? 800 : 700, biteT: 0, prog: 0, need: 0, block: -1, carrier: 0, who: '',
     };
     if (kind === 'survivors') G.stats.total += m.people; // people nobody knew were there
-    if (kind === 'vip') m.who = VIPS[Math.floor(G.rnd() * VIPS.length)];
+    if (kind === 'vip') m.who = VIPS[(G.seed + G.vips++) % VIPS.length];
     G.missions.push(m);
     say(kind === 'survivors' ? `Survivors are signalling from a rooftop near ${near.name}: ${m.people} people. Get any unit to them in 75 seconds.`
       : kind === 'vip' ? `${m.who} is trapped near ${near.name}. Reach them in 75 seconds, then bring them to the harbour or the fort.`
