@@ -37,9 +37,9 @@ All sound is synthesised with Web Audio: rifle shots, APC and gunship machine gu
 
 | Strategy | Before | After |
 |---|---|---|
-| Do nothing | 23.0% | see below |
-| Evacuate everything at once | 32.5% | see below |
-| Steady scripted player | 50.8% | see below |
-| Active: steady plus missions and two rescue APCs | | see below |
+| Do nothing | 23.0% | 19.7% |
+| Evacuate everything at once | 32.5% | 32.1% |
+| Steady scripted player | 50.8% | 51.7% (42 to 68) |
+| Active: steady plus missions and two rescue APCs | | 64.5% (44 to 74) |
 
-The active player completes 7 to 9 missions a game and carries about 3,000 people out by APC.
+The new threats make doing nothing a little worse. The new verbs are worth using: chasing missions and running APC rescues adds about 13 points over steady play, reaching the top grade in 3 of 4 games. The active player completes 7 to 9 missions a game and carries about 3,000 people out by APC. No script errors in any run.

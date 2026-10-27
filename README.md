@@ -20,6 +20,8 @@ A real-time take on the same outbreak, fought street by street across one city i
 - Every sound is synthesised in the browser: gunfire, tank cannon, explosions, ship horns, sirens and the groans of the infected. M mutes.
 - The last ship sails after 12 minutes. You are scored on the share of the city saved: 60% is the top grade.
 
+**Documentation:** player guides, code references, a glossary and an FAQ for both games are in [docs/](docs/README.md). See also [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md).
+
 ## How it plays
 
 - The map has 21 places linked by roads and railways: the capital Aldermoor (your headquarters), towns, army bases, supply depots and three evacuation ports.
