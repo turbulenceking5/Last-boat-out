@@ -27,3 +27,8 @@ Selecting a place now shows a small low-poly Three.js model of it in the side pa
 
 - The 3D view needs the CDN the first time; offline play works, just without models.
 - People are small at panel size; the models are a picture of the place, not a precise count. The panel's numbers stay the source of truth.
+
+## Pictures
+
+- Every place type: [screens/3d/types.png](screens/3d/types.png)
+- A town through threatened, holding, losing, fallen and evacuating, and a base at night: [screens/3d/states.png](screens/3d/states.png)
