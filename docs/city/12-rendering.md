@@ -4,12 +4,15 @@
 
 ## The static city
 
-- **Ground:** one plane with a canvas texture painted once: roads, lane markings, pavements, lots, park paths, the helipad and the quay. 12 px per cell.
-- **Sea:** a large plane below the ground, with a quay wall along the edge.
-- **Buildings:** instanced meshes. One for bodies (unit boxes scaled per building, coloured per instance), one for flat roofs, one for house gables, one for fuel tanks, and one for dark window bands wrapped round every floor of taller buildings. When a block is overrun, its instances are recoloured to 32% brightness.
-- **Trees:** instanced trunks and cones.
+Everything here is built once, by `buildCity()`. "Play again" reuses it, because the map never changes.
 
-The city is built once. "Play again" reuses it, because the street layout never changes.
+- **Ground:** one plane with a canvas texture painted once at 16 px per cell: asphalt with grain, repair patches, oil stains and cracks; dashed lane lines between the junctions and zebra crossings on every approach; paved pavements with kerbs round every block; each block's own ground (lawns and hedges, paving, yards with bay markings, cobbles, ballast and rails, a pitch); the helipad; the quay's slabs, crane rails and yellow edge. Water cells are left transparent (`alphaTest`), so the sea plane shows through as the river and the pond.
+- **Outskirts:** a second, coarser plane (5 px per cell) reaching 60 cells beyond the map on three sides: fields, suburban lawns, the roads out of town, the railway and the shore, with holes for the city and the river. Houses, barns and silos stand on it, and the fog swallows its far edge.
+- **Water:** a large, slightly glossy plane 0.35 below the ground. Embankment walls stand wherever water meets land (with a low parapet where a street ends at the river), and each bridge has a stone face with an arch on both sides (an instanced extruded shape).
+- **Buildings:** instanced meshes, one per shape: boxes for bodies (unit boxes scaled, turned and coloured per instance), flat roof caps, pitched roofs (an extruded gable with its ridge along the longer side), cylinders (tanks, chimneys, the apse, the fountain), cones (spires), half-spheres (the City Hall dome) and the dark window bands wrapped round every floor of flats and towers. A piece can stand on another (`y`), so towers have setback crowns and the hospital its red cross. When a block is overrun, its instances are recoloured to 32% brightness.
+- **Trees:** instanced trunks, with cones for conifers and low-poly balls for broadleaves, shaded per tree.
+- **Props:** two more instanced meshes (boxes and cylinders) for the embankment walls, the gantry cranes, the bollards, the lighthouse and mole, and Fort Aldermoor's sandbags.
+- **Cars:** abandoned cars as two instanced meshes, body and cabin.
 
 ## People
 
