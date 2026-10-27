@@ -1,0 +1,14 @@
+{
+  // Sources are plain global scripts (no import/export). tsc type-checks them against
+  // @types/three and compiles each to build/; build.js joins them into ../models/models.js.
+  "compilerOptions": {
+    "target": "ES2019",
+    "lib": ["ES2019", "DOM"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "rootDir": "src",
+    "outDir": "build",
+    "types": []
+  },
+  "files": ["src/env.d.ts", "src/kit.ts", "src/places.ts", "src/life.ts", "src/viewer.ts"]
+}

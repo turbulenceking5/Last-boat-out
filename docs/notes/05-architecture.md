@@ -14,7 +14,7 @@ Everything is in one file, `index.html` (about 84 KB): markup, CSS and script, n
 
 | Function | Does |
 |---|---|
-| `orderMove`, `orderEvac`, `orderFortify`, `orderAirdrop`, `orderMilitia`, `orderStrike`, `orderCut` | Queue the player's orders |
+| `orderMove`, `orderEvac`, `orderFortify`, `orderAirdrop`, `orderMilitia`, `orderStrike`, `orderAirlift`, `orderCut` | Queue the player's orders |
 | `undo` | Removes the last order |
 | `endTurn` | Resolves 12 hours: spread, combat, refugees, ships, events |
 | `decide(i)` | Picks option `i` for the event at the front of `S.events` |
