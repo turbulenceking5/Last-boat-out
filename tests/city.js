@@ -21,11 +21,11 @@ const STRATS = {
       C.order('gunship', x / G.zeds.length, z / G.zeds.length, null);
     }
   },
-  // steady, plus the new verbs: chase every mission with the nearest free unit, and run APC rescues
-  active: (C, t, s, steady) => {
+  // steady, plus chasing every mission with the nearest free unit, and running APC rescues
+  missions: (C, t, s, lib) => {
     const G = C.G;
     if (!s.init) { s.init = 1; s.steady = {}; s.apcs = 0; s.tick = 0; }
-    steady(C, t, s.steady);
+    lib.steady(C, t, s.steady, lib);
     if (G.funds >= 700 && s.apcs < 2 && t > 20) { C.order('apc', 33, 49, null); s.apcs++; }
     if ((s.tick = (s.tick || 0) + 1) % 40) return;
     const d2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
@@ -41,6 +41,31 @@ const STRATS = {
       if (b) C.sendToBlock([u], b);
     }
   },
+  // missions, plus everything a good player does with the abilities round: answer each decision,
+  // throw grenades and fire barrages whenever there's a target, take VIPs home, and pull battered
+  // squads back to the nearest evacuation point to reinforce them
+  active: (C, t, s, lib) => {
+    const G = C.G;
+    if (!s.init) { s.init = 1; s.base = {}; s.tick = 0; }
+    if (G.decision) {
+      const funds = G.funds, id = G.decision.id;
+      C.choose(id === 'broadcast' ? 1 : id === 'volunteers' ? 0 : id === 'ferry' ? (funds >= 1500 ? 0 : 2) : id === 'bridges' ? (funds >= 800 ? 1 : 2) : 0);
+    }
+    lib.missions(C, t, s.base, lib);
+    if ((s.tick = s.tick + 1) % 20) return;
+    const d2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+    for (const u of G.units) {
+      if (u.kind !== 'apc' && u.ab <= 0) C.useAbility(u);
+      const m = G.missions.find(m => m.kind === 'vip' && m.carrier === u.id);
+      if (m && u.goal < 0) { C.moveUnits([u], m.x, m.z); continue; }
+      if (u.kind === 'militia' || u.kind === 'apc' || u._mission !== undefined) continue;
+      const s0 = { militia: [6, 3], infantry: [8, 6], tank: [1, 160] }[u.kind], hp = u.members.reduce((a, b) => a + b.hp, 0);
+      if (hp < s0[0] * s0[1] * 0.5 && !u._refit && G.funds > 300 && !(t < u._refitT)) {
+        const e = G.evacs.slice().sort((a, b) => d2(a, u) - d2(b, u))[0];
+        u._refit = 1; C.moveUnits([u], e.x, e.z);
+      } else if (u._refit && u.goal < 0) { C.reinforce(u); delete u._refit; u._refitT = t + 30; }
+    }
+  },
 };
 module.exports = { STRATS };
 if (require.main === module) (async () => {
@@ -54,12 +79,13 @@ if (require.main === module) (async () => {
   for (const name of names) {
     const pcts = [];
     for (let seed = 1; seed <= n; seed++) {
-      pcts.push(await page.evaluate(([seed, src, steadySrc]) => {
+      pcts.push(await page.evaluate(([seed, name, srcs]) => {
         const C = window.City; C.reset(seed);
-        const strat = eval(src), steady = eval(steadySrc), s = {};
-        for (let i = 0; i < 12 * 60 * 20 + 20 && !C.G.over; i++) { strat(C, C.G.t, s, steady); C.tick(1 / 20); }
+        const lib = {}; for (const k in srcs) lib[k] = eval(srcs[k]);
+        const strat = lib[name], s = {};
+        for (let i = 0; i < 12 * 60 * 20 + 20 && !C.G.over; i++) { strat(C, C.G.t, s, lib); C.tick(1 / 20); }
         return C.G.over.pct;
-      }, [seed, STRATS[name].toString(), STRATS.steady.toString()]));
+      }, [seed, name, Object.fromEntries(Object.entries(STRATS).map(([k, f]) => [k, '(' + f.toString() + ')']))]));
     }
     const mean = pcts.reduce((a, b) => a + b, 0) / pcts.length;
     console.log(`${name.padEnd(8)} mean ${mean.toFixed(1)}%  [${pcts.map(p => p.toFixed(1)).join(', ')}]`);

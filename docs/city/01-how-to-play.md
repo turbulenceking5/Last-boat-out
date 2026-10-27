@@ -9,7 +9,10 @@ You command the defence of one city in the first night of an outbreak. The infec
 1. **Open evacuation routes.** The harbour is open from the start. Buy bus evacuation points to add capacity closer to where people live.
 2. **Move people.** Order blocks to evacuate, or let them panic when the infected come close. Use APCs to carry people out of blocks that are cut off.
 3. **Fight.** Buy troops and vehicles, put them where the infected are coming from, and call in air support when a horde gets too big.
-4. **React.** Missions appear on the map, new outbreaks start, and at minute 8 a great horde arrives from the east.
+4. **Use your units.** Every unit has a special ability on F: grenades, molotovs, a tank barrage, or an APC siren that pulls the infected after it. Units earn ranks with kills; reinforce battered squads at the fort or an evacuation point.
+5. **React.** Missions appear on the map (supply drops, rooftop survivors, VIPs, blocks to hold), command asks you to make four decisions, new outbreaks start, and at minute 8 a great horde arrives from the east, making for the biggest crowd. In the last minutes, people who hid signal from the rooftops; get them out, then fall back to the harbour for the last ship.
+
+For the first four minutes, **Orders from HQ** in the Missions box suggest what to do first, with a small reward for each.
 
 ## Winning
 

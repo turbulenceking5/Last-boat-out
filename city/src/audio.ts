@@ -58,7 +58,7 @@ function tone(vol: number, type: OscillatorType, f0: number, f1: number, attack:
   o.start(t); o.stop(t + attack + decay + 0.05);
 }
 
-const GAP: Record<Sfx, number> = { shot: 0.045, mg: 0.06, cannon: 0.25, boom: 0.08, horn: 2, alarm: 3, chime: 0.3, crunch: 0.2 };
+const GAP: Record<Sfx, number> = { shot: 0.045, mg: 0.06, cannon: 0.25, boom: 0.08, horn: 2, alarm: 3, chime: 0.3, crunch: 0.2, siren: 1.2, rank: 0.5, tick: 0.5, throw: 0.15 };
 const SOUND: Record<Sfx, (v: number) => void> = {
   shot: v => noiseBurst(0.35 * v, 1700 + Math.random() * 600, 1.2, 0.002, 0.07),
   mg: v => noiseBurst(0.25 * v, 1100, 1.5, 0.002, 0.05),
@@ -68,6 +68,14 @@ const SOUND: Record<Sfx, (v: number) => void> = {
   alarm: () => { for (let k = 0; k < 3; k++) { tone(0.12, 'square', 520, 860, 0.02, 0.5, 1800, k * 0.9); tone(0.12, 'square', 860, 520, 0.02, 0.38, 1800, k * 0.9 + 0.5); } },
   chime: () => { tone(0.18, 'sine', 660, 660, 0.01, 0.35); tone(0.15, 'sine', 990, 990, 0.01, 0.5, 4000, 0.12); },
   crunch: v => noiseBurst(0.45 * v, 300, 2, 0.003, 0.18, 'bandpass', 120),
+  // an APC's siren: a rising and falling wail
+  siren: v => { const a = 0.12 * Math.max(v, 0.3); tone(a, 'sawtooth', 600, 1150, 0.02, 0.6, 2200); tone(a, 'sawtooth', 1150, 600, 0.02, 0.55, 2200, 0.62); },
+  // promotion: a short bugle-like rising triad
+  rank: () => { tone(0.14, 'triangle', 523, 523, 0.01, 0.16); tone(0.14, 'triangle', 659, 659, 0.01, 0.16, 4000, 0.13); tone(0.16, 'triangle', 784, 784, 0.01, 0.4, 4000, 0.26); },
+  // the last ship's countdown
+  tick: () => tone(0.16, 'square', 1320, 1320, 0.003, 0.06, 3000),
+  // a grenade or bottle leaving a hand: a short whoosh
+  throw: v => noiseBurst(0.18 * v, 2500, 0.8, 0.02, 0.18, 'bandpass', 900),
 };
 
 /** Play whatever the simulation recorded since the last frame. */
@@ -79,7 +87,7 @@ function playSfx(dt: number) {
   // keep only the nearest event of each kind this frame
   const best: Partial<Record<Sfx, number>> = {};
   for (const e of events) {
-    const d = Math.hypot(e.x - cam.x, e.z - cam.z), v = e.k === 'alarm' || e.k === 'horn' || e.k === 'chime' ? 1 : clamp(1 - d / reach, 0, 1) * clamp(40 / cam.dist, 0.35, 1);
+    const d = Math.hypot(e.x - cam.x, e.z - cam.z), v = e.k === 'alarm' || e.k === 'horn' || e.k === 'chime' || e.k === 'rank' || e.k === 'tick' ? 1 : clamp(1 - d / reach, 0, 1) * clamp(40 / cam.dist, 0.35, 1);
     if (v > (best[e.k] ?? 0)) best[e.k] = v;
   }
   for (const k of Object.keys(best) as Sfx[]) {

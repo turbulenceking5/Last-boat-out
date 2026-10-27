@@ -21,9 +21,9 @@ const path = require('path');
       if (r < 0.45) await page.mouse.click(rnd(0, w), rnd(0, h), { button: Math.random() < 0.15 ? 'right' : 'left' });
       else if (r < 0.55) { await page.mouse.move(rnd(0, w), rnd(0, h)); await page.mouse.down(); await page.mouse.move(rnd(0, w), rnd(0, h), { steps: 3 }); await page.mouse.up(); }
       else if (r < 0.62) await page.mouse.wheel(0, rnd(-400, 400));
-      else if (r < 0.85) await page.keyboard.press(['1', '2', '3', '4', '5', '6', '7', 'Escape', ' ', 'q', 'e', '+', '-', 'Control+a', '?', 'w', 'd'][Math.floor(Math.random() * 17)]);
+      else if (r < 0.85) await page.keyboard.press(['1', '2', '3', '4', '5', '6', '7', 'Escape', ' ', 'q', 'e', '+', '-', 'Control+a', '?', 'w', 'd', 'f', 'r'][Math.floor(Math.random() * 19)]);
       else {
-        const btns = await page.$$('#overlay:not([hidden]) [data-act], #bar [data-order], #sel [data-act]:not([disabled]), #hint [data-act]');
+        const btns = await page.$$('#overlay:not([hidden]) [data-act]:not([disabled]), #bar [data-order], #sel [data-act]:not([disabled]), #hint [data-act]');
         if (btns.length) await btns[Math.floor(Math.random() * btns.length)].click().catch(() => {});
       }
       if (i % 40 === 0) await page.evaluate(() => { const G = window.City.G; G.funds += 800; for (let k = 0; k < 600; k++) window.City.tick(1 / 20); });

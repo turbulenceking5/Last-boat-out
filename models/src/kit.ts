@@ -101,6 +101,11 @@ const GEO = {
     return new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5);
   })(),
   vault: new THREE.CylinderGeometry(0.5, 0.5, 1, 10, 1, false, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2),
+  /** a unit box hanging from its top face, for limbs that swing at the hip or shoulder */
+  limb: new THREE.BoxGeometry(1, 1, 1).translate(0, -0.5, 0),
+  /** a sandbag: a squashed, faceted pillow */
+  bag: new THREE.SphereGeometry(0.5, 6, 3).scale(1, 1, 1).translate(0, 0.5, 0),
+  disc: new THREE.CylinderGeometry(0.5, 0.5, 1, 7).translate(0, 0.5, 0),
 };
 
 /** Add a mesh of a shared geometry, sized, placed and turned. */
@@ -157,7 +162,15 @@ function block(c: Ctx, x: number, z: number, ry: number, w: number, d: number, h
   const g = new THREE.Group();
   const top = c.burnt ? h * (0.45 + c.rnd() * 0.4) : h; // burnt-out shells are broken off
   box(g, wallMat(c, wall), w, top, d);
-  if (!c.burnt) box(g, mat(COL.stone), w + 0.06, 0.06, d + 0.06, 0, top, 0);
+  if (!c.burnt) {
+    box(g, mat(COL.stone), w + 0.06, 0.06, d + 0.06, 0, top, 0);
+    // roof clutter: a lift housing, air-conditioning boxes, sometimes a water tank
+    if (h > 1.2) {
+      box(g, mat(COL.stone), w * 0.3, 0.18, d * 0.3, -w * 0.2, top + 0.06, -d * 0.15);
+      for (let i = 0; i < 2; i++) box(g, mat(COL.steel), 0.12, 0.08, 0.1, w * (0.1 + i * 0.18), top + 0.06, d * 0.2);
+      if (c.rnd() < 0.35) { part(g, GEO.cyl, mat(COL.trunk), 0.22, 0.22, 0.22, w * 0.25, top + 0.2, -d * 0.2); for (const o of [-0.07, 0.07]) box(g, mat(COL.char2), 0.02, 0.14, 0.02, w * 0.25 + o, top + 0.06, -d * 0.2); }
+    }
+  }
   windows(c, g, w, top, d, Math.max(1, Math.round(top / 0.55)));
   g.position.set(x, 0, z);
   g.rotation.y = ry;
@@ -184,21 +197,73 @@ function strip(c: Ctx, color: number, w: number, d: number, x: number, z: number
   return m;
 }
 
-interface Figure { g: TGroup; legs: TMesh[] }
+/** A figure's swinging parts. armSwing 0 keeps the arms still (holding a rifle, reaching). */
+interface Figure { g: TGroup; legs: TMesh[]; arms: TMesh[]; armSwing: number }
 
-/** A chunky little person: body, head, two legs, optional helmet. */
-function person(body: number, opts: { head?: number; helmet?: number; scale?: number } = {}): Figure {
+interface PersonOpts {
+  head?: number;      // skin
+  helmet?: number;    // a steel helmet
+  cap?: number;       // a peaked cap
+  hat?: number;       // a brimmed hat
+  hair?: number;
+  legs?: number;      // trousers
+  arms?: number;      // sleeves (defaults to the body colour)
+  pose?: 'walk' | 'rifle' | 'reach';
+  scale?: number;
+  broad?: number;     // widen the shoulders (brutes)
+}
+
+/** A chunky little person: legs and arms that swing, a body, a head and something on it. */
+function person(body: number, opts: PersonOpts = {}): Figure {
   const g = new THREE.Group();
-  const s = (opts.scale ?? 1) * 1.3; // a touch larger than life so they read at panel size
-  const legs: TMesh[] = [];
+  const s = (opts.scale ?? 1) * 1.45; // larger than life so they read at panel size
+  const b = opts.broad ?? 1, pose = opts.pose ?? 'walk';
+  const legs: TMesh[] = [], arms: TMesh[] = [];
+  for (const side of [-1, 1]) legs.push(part(g, GEO.limb, mat(opts.legs ?? COL.char2), 0.075 * s * b, 0.16 * s, 0.085 * s, side * 0.05 * s * b, 0.16 * s, 0));
+  part(g, GEO.cyl6, mat(body), 0.21 * s * b, 0.2 * s, 0.15 * s * b, 0, 0.15 * s, 0);
   for (const side of [-1, 1]) {
-    const leg = part(g, GEO.box, mat(COL.char2), 0.07 * s, 0.16 * s, 0.08 * s, side * 0.05 * s, 0, 0);
-    legs.push(leg);
+    const arm = part(g, GEO.limb, mat(opts.arms ?? body), 0.055 * s * b, 0.17 * s * (b > 1 ? 1.4 : 1), 0.06 * s * b, side * 0.125 * s * b, 0.33 * s, 0);
+    arm.rotation.x = pose === 'reach' ? -1.35 : pose === 'rifle' ? -0.95 : 0;
+    if (pose === 'rifle') arm.rotation.z = side * 0.35;
+    arms.push(arm);
   }
-  part(g, GEO.cyl6, mat(body), 0.2 * s, 0.2 * s, 0.15 * s, 0, 0.15 * s, 0);
-  part(g, GEO.ball, mat(opts.head ?? COL.skin), 0.14 * s, 0.14 * s, 0.14 * s, 0, 0.42 * s, 0);
-  if (opts.helmet !== undefined) part(g, GEO.dome, mat(opts.helmet), 0.17 * s, 0.13 * s, 0.17 * s, 0, 0.44 * s, 0);
-  return { g, legs };
+  const hy = 0.42 * s;
+  part(g, GEO.ball, mat(opts.head ?? COL.skin), 0.14 * s, 0.14 * s, 0.14 * s, 0, hy, pose === 'reach' ? 0.03 * s : 0);
+  if (opts.helmet !== undefined) {
+    part(g, GEO.dome, mat(opts.helmet), 0.18 * s, 0.13 * s, 0.18 * s, 0, hy + 0.02 * s, 0);
+  } else if (opts.cap !== undefined) {
+    part(g, GEO.dome, mat(opts.cap), 0.15 * s, 0.09 * s, 0.15 * s, 0, hy + 0.03 * s, 0);
+    box(g, mat(opts.cap), 0.1 * s, 0.015 * s, 0.07 * s, 0, hy + 0.03 * s, 0.08 * s);
+  } else if (opts.hat !== undefined) {
+    part(g, GEO.cyl, mat(opts.hat), 0.22 * s, 0.015 * s, 0.22 * s, 0, hy + 0.04 * s, 0);
+    part(g, GEO.cyl, mat(opts.hat), 0.12 * s, 0.07 * s, 0.12 * s, 0, hy + 0.05 * s, 0);
+  } else if (opts.hair !== undefined) {
+    part(g, GEO.dome, mat(opts.hair), 0.145 * s, 0.09 * s, 0.145 * s, 0, hy + 0.01 * s, -0.005 * s);
+  }
+  if (pose === 'rifle') box(g, mat(COL.char2), 0.035 * s, 0.035 * s, 0.3 * s, 0.03 * s, 0.25 * s, 0.13 * s);
+  return { g, legs, arms, armSwing: pose === 'walk' ? 1 : 0 };
+}
+
+/** A small car or van, nose along +x. */
+function car(c: Ctx, x: number, z: number, ry: number, color: number, van = false): TGroup {
+  const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.y = ry; c.root.add(g);
+  const body = c.burnt ? COL.char : color;
+  for (const sx of [-0.18, 0.18]) for (const sz of [-0.13, 0.13]) {
+    const w = part(g, GEO.cyl6, mat(COL.char2), 0.11, 0.06, 0.11, sx, 0.055, sz * 1.1);
+    w.rotation.x = Math.PI / 2;
+  }
+  box(g, mat(body), 0.55, 0.13, 0.26, 0, 0.04, 0);
+  if (van) box(g, mat(body), 0.4, 0.16, 0.25, -0.07, 0.17, 0);
+  else box(g, mat(c.burnt ? COL.char2 : COL.window), 0.3, 0.1, 0.24, -0.03, 0.17, 0);
+  if (!van && !c.burnt) box(g, mat(body), 0.28, 0.02, 0.25, -0.03, 0.27, 0);
+  return g;
+}
+
+/** A street lamp, lit at night. */
+function lamp(c: Ctx, x: number, z: number) {
+  box(c.root, mat(COL.char2), 0.04, 0.75, 0.04, x, 0, z);
+  const on = c.spec.night && !c.burnt && !c.ghost;
+  box(c.root, mat(on ? COL.glow : COL.steel, { glow: on ? COL.glow : undefined }), 0.1, 0.05, 0.1, x, 0.75, z);
 }
 
 /** Pick a free spot, preferring the yards a builder set aside, else a ring between r0 and r1. */

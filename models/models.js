@@ -70,6 +70,11 @@ const GEO = {
         return new THREE.ExtrudeGeometry(s, { depth: 1, bevelEnabled: false }).translate(0, 0, -0.5);
     })(),
     vault: new THREE.CylinderGeometry(0.5, 0.5, 1, 10, 1, false, -Math.PI / 2, Math.PI).rotateX(Math.PI / 2),
+    /** a unit box hanging from its top face, for limbs that swing at the hip or shoulder */
+    limb: new THREE.BoxGeometry(1, 1, 1).translate(0, -0.5, 0),
+    /** a sandbag: a squashed, faceted pillow */
+    bag: new THREE.SphereGeometry(0.5, 6, 3).scale(1, 1, 1).translate(0, 0.5, 0),
+    disc: new THREE.CylinderGeometry(0.5, 0.5, 1, 7).translate(0, 0.5, 0),
 };
 /** Add a mesh of a shared geometry, sized, placed and turned. */
 function part(parent, geo, m, sx, sy, sz, x = 0, y = 0, z = 0, ry = 0) {
@@ -123,8 +128,20 @@ function block(c, x, z, ry, w, d, h, wall = COL.wall2) {
     const g = new THREE.Group();
     const top = c.burnt ? h * (0.45 + c.rnd() * 0.4) : h; // burnt-out shells are broken off
     box(g, wallMat(c, wall), w, top, d);
-    if (!c.burnt)
+    if (!c.burnt) {
         box(g, mat(COL.stone), w + 0.06, 0.06, d + 0.06, 0, top, 0);
+        // roof clutter: a lift housing, air-conditioning boxes, sometimes a water tank
+        if (h > 1.2) {
+            box(g, mat(COL.stone), w * 0.3, 0.18, d * 0.3, -w * 0.2, top + 0.06, -d * 0.15);
+            for (let i = 0; i < 2; i++)
+                box(g, mat(COL.steel), 0.12, 0.08, 0.1, w * (0.1 + i * 0.18), top + 0.06, d * 0.2);
+            if (c.rnd() < 0.35) {
+                part(g, GEO.cyl, mat(COL.trunk), 0.22, 0.22, 0.22, w * 0.25, top + 0.2, -d * 0.2);
+                for (const o of [-0.07, 0.07])
+                    box(g, mat(COL.char2), 0.02, 0.14, 0.02, w * 0.25 + o, top + 0.06, -d * 0.2);
+            }
+        }
+    }
     windows(c, g, w, top, d, Math.max(1, Math.round(top / 0.55)));
     g.position.set(x, 0, z);
     g.rotation.y = ry;
@@ -148,21 +165,69 @@ function strip(c, color, w, d, x, z, ry = 0, y = 0.005) {
     m.castShadow = false;
     return m;
 }
-/** A chunky little person: body, head, two legs, optional helmet. */
+/** A chunky little person: legs and arms that swing, a body, a head and something on it. */
 function person(body, opts = {}) {
-    var _a, _b;
+    var _a, _b, _c, _d, _e, _f;
     const g = new THREE.Group();
-    const s = ((_a = opts.scale) !== null && _a !== void 0 ? _a : 1) * 1.3; // a touch larger than life so they read at panel size
-    const legs = [];
+    const s = ((_a = opts.scale) !== null && _a !== void 0 ? _a : 1) * 1.45; // larger than life so they read at panel size
+    const b = (_b = opts.broad) !== null && _b !== void 0 ? _b : 1, pose = (_c = opts.pose) !== null && _c !== void 0 ? _c : 'walk';
+    const legs = [], arms = [];
+    for (const side of [-1, 1])
+        legs.push(part(g, GEO.limb, mat((_d = opts.legs) !== null && _d !== void 0 ? _d : COL.char2), 0.075 * s * b, 0.16 * s, 0.085 * s, side * 0.05 * s * b, 0.16 * s, 0));
+    part(g, GEO.cyl6, mat(body), 0.21 * s * b, 0.2 * s, 0.15 * s * b, 0, 0.15 * s, 0);
     for (const side of [-1, 1]) {
-        const leg = part(g, GEO.box, mat(COL.char2), 0.07 * s, 0.16 * s, 0.08 * s, side * 0.05 * s, 0, 0);
-        legs.push(leg);
+        const arm = part(g, GEO.limb, mat((_e = opts.arms) !== null && _e !== void 0 ? _e : body), 0.055 * s * b, 0.17 * s * (b > 1 ? 1.4 : 1), 0.06 * s * b, side * 0.125 * s * b, 0.33 * s, 0);
+        arm.rotation.x = pose === 'reach' ? -1.35 : pose === 'rifle' ? -0.95 : 0;
+        if (pose === 'rifle')
+            arm.rotation.z = side * 0.35;
+        arms.push(arm);
     }
-    part(g, GEO.cyl6, mat(body), 0.2 * s, 0.2 * s, 0.15 * s, 0, 0.15 * s, 0);
-    part(g, GEO.ball, mat((_b = opts.head) !== null && _b !== void 0 ? _b : COL.skin), 0.14 * s, 0.14 * s, 0.14 * s, 0, 0.42 * s, 0);
-    if (opts.helmet !== undefined)
-        part(g, GEO.dome, mat(opts.helmet), 0.17 * s, 0.13 * s, 0.17 * s, 0, 0.44 * s, 0);
-    return { g, legs };
+    const hy = 0.42 * s;
+    part(g, GEO.ball, mat((_f = opts.head) !== null && _f !== void 0 ? _f : COL.skin), 0.14 * s, 0.14 * s, 0.14 * s, 0, hy, pose === 'reach' ? 0.03 * s : 0);
+    if (opts.helmet !== undefined) {
+        part(g, GEO.dome, mat(opts.helmet), 0.18 * s, 0.13 * s, 0.18 * s, 0, hy + 0.02 * s, 0);
+    }
+    else if (opts.cap !== undefined) {
+        part(g, GEO.dome, mat(opts.cap), 0.15 * s, 0.09 * s, 0.15 * s, 0, hy + 0.03 * s, 0);
+        box(g, mat(opts.cap), 0.1 * s, 0.015 * s, 0.07 * s, 0, hy + 0.03 * s, 0.08 * s);
+    }
+    else if (opts.hat !== undefined) {
+        part(g, GEO.cyl, mat(opts.hat), 0.22 * s, 0.015 * s, 0.22 * s, 0, hy + 0.04 * s, 0);
+        part(g, GEO.cyl, mat(opts.hat), 0.12 * s, 0.07 * s, 0.12 * s, 0, hy + 0.05 * s, 0);
+    }
+    else if (opts.hair !== undefined) {
+        part(g, GEO.dome, mat(opts.hair), 0.145 * s, 0.09 * s, 0.145 * s, 0, hy + 0.01 * s, -0.005 * s);
+    }
+    if (pose === 'rifle')
+        box(g, mat(COL.char2), 0.035 * s, 0.035 * s, 0.3 * s, 0.03 * s, 0.25 * s, 0.13 * s);
+    return { g, legs, arms, armSwing: pose === 'walk' ? 1 : 0 };
+}
+/** A small car or van, nose along +x. */
+function car(c, x, z, ry, color, van = false) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = ry;
+    c.root.add(g);
+    const body = c.burnt ? COL.char : color;
+    for (const sx of [-0.18, 0.18])
+        for (const sz of [-0.13, 0.13]) {
+            const w = part(g, GEO.cyl6, mat(COL.char2), 0.11, 0.06, 0.11, sx, 0.055, sz * 1.1);
+            w.rotation.x = Math.PI / 2;
+        }
+    box(g, mat(body), 0.55, 0.13, 0.26, 0, 0.04, 0);
+    if (van)
+        box(g, mat(body), 0.4, 0.16, 0.25, -0.07, 0.17, 0);
+    else
+        box(g, mat(c.burnt ? COL.char2 : COL.window), 0.3, 0.1, 0.24, -0.03, 0.17, 0);
+    if (!van && !c.burnt)
+        box(g, mat(body), 0.28, 0.02, 0.25, -0.03, 0.27, 0);
+    return g;
+}
+/** A street lamp, lit at night. */
+function lamp(c, x, z) {
+    box(c.root, mat(COL.char2), 0.04, 0.75, 0.04, x, 0, z);
+    const on = c.spec.night && !c.burnt && !c.ghost;
+    box(c.root, mat(on ? COL.glow : COL.steel, { glow: on ? COL.glow : undefined }), 0.1, 0.05, 0.1, x, 0.75, z);
 }
 /** Pick a free spot, preferring the yards a builder set aside, else a ring between r0 and r1. */
 function spot(c, r0, r1) {
@@ -250,6 +315,14 @@ const BUILD = {
         for (const [x, z, r] of lots)
             house(c, x, z, r, 0.8 + c.rnd() * 0.3, 0.65, 0.5 + c.rnd() * 0.25, walls[Math.floor(c.rnd() * 4)], roofs[Math.floor(c.rnd() * 3)]);
         c.yards.push([0.6, 0.2], [-1.2, 0.2], [2.5, 0.2], [0.6, -1.5], [0.6, 1.8], [-0.3, -0.6]);
+        car(c, -2.6, 0.5, 0, 0x7f93a6);
+        car(c, 3.6, -0.1, Math.PI, COL.blood);
+        car(c, 0.95, 2.6, Math.PI / 2, COL.wall3, true);
+        for (const [x, z] of [[-0.3, -0.25], [1.6, 0.65], [-2.3, -0.25], [3.3, 0.65], [0.05, 1.2], [1.15, -1.4]])
+            lamp(c, x, z);
+        // the war memorial by the church
+        box(c.root, mat(COL.stone), 0.3, 0.12, 0.3, -0.25, 0, -1.35);
+        box(c.root, mat(COL.stone), 0.12, 0.55, 0.12, -0.25, 0.12, -1.35);
         treeRing(c, 9, 3.7, 4.6, (x, z) => Math.abs(z - 0.2) > 0.7 && Math.abs(x - 0.6) > 0.6);
     },
     city(c) {
@@ -277,6 +350,28 @@ const BUILD = {
             box(c.root, mat(COL.blood, { glow: c.spec.night ? COL.blood : undefined }), 0.12, 0.12, 0.12, 0, 4.5, 0);
         }
         c.yards.push([-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5], [0, 1.5], [0, -1.5], [-1.5, 0], [1.5, 0]);
+        const cars = [0x7f93a6, COL.blood, COL.wall1, COL.amber, 0x3d5a78, 0x5d6b72];
+        for (let i = 0; i < 7; i++) {
+            const along = -4 + c.rnd() * 8, v = [-1.5, 1.5][i % 2] + (c.rnd() < 0.5 ? -0.2 : 0.2);
+            if (Math.abs(along - 1.5) < 0.5 || Math.abs(along + 1.5) < 0.5 || Math.hypot(along, v) > 4.4)
+                continue;
+            if (i < 4)
+                car(c, along, v, c.rnd() < 0.5 ? 0 : Math.PI, cars[i % cars.length]);
+            else
+                car(c, v, along, Math.PI / 2 + (c.rnd() < 0.5 ? 0 : Math.PI), cars[i % cars.length], i === 6);
+        }
+        for (const [x, z] of [[-2.1, -0.95], [0.9, -2.05], [2.05, 0.95], [-0.95, 2.05]])
+            lamp(c, x, z);
+        if (!c.burnt) { // a billboard on the corner
+            const bb = new THREE.Group();
+            bb.position.set(3.1, 0, -3.1);
+            bb.rotation.y = -Math.PI / 4;
+            c.root.add(bb);
+            for (const sx of [-0.35, 0.35])
+                box(bb, mat(COL.char2), 0.05, 0.9, 0.05, sx, 0, 0);
+            box(bb, mat(COL.amber), 1.0, 0.45, 0.05, 0, 0.9, 0);
+            box(bb, mat(COL.troop), 0.6, 0.12, 0.06, -0.1, 1.05, 0);
+        }
     },
     capital(c) {
         ground(c, 0xb9b39b);
@@ -306,6 +401,20 @@ const BUILD = {
             [-1.2, -3.3, 1.3, 0.9, 1.3], [1.3, -3.3, 1.3, 0.9, 1.1], [-1.3, 3.9, 1.2, 0.7, 0.9], [1.3, 3.9, 1.2, 0.7, 1.0]])
             block(c, x, z, 0, w, d, h, c.rnd() < 0.5 ? COL.wall2 : COL.wall3);
         c.yards.push([-1, 1.4], [1, 1.4], [0, 2.2], [-2.6, 0.3], [2.6, 0.3], [0, 2.9]);
+        // a statue on a plinth in the square, in a fountain basin
+        part(c.root, GEO.cyl, mat(COL.stone), 0.9, 0.12, 0.9, 0, 0, 1.6);
+        part(c.root, GEO.cyl, mat(c.burnt ? 0x46585c : COL.water), 0.75, 0.13, 0.75, 0, 0, 1.6).castShadow = false;
+        box(c.root, mat(COL.stone), 0.22, 0.4, 0.22, 0, 0.1, 1.6);
+        if (!c.burnt) {
+            const st = person(COL.dome, { head: COL.dome, legs: COL.dome, arms: COL.dome, hat: COL.dome, scale: 1.05 });
+            st.arms[1].rotation.x = -2.4;
+            st.g.position.set(0, 0.5, 1.6);
+            c.root.add(st.g);
+        }
+        for (const [x, z] of [[-1.7, 0.7], [1.7, 0.7], [-1.7, 2.5], [1.7, 2.5]])
+            lamp(c, x, z);
+        car(c, -3.6, 3.15, 0, 0x2b2b2b);
+        car(c, 3.4, 2.65, Math.PI, 0x2b2b2b);
         treeRing(c, 5, 3.9, 4.5, (x, z) => Math.abs(x) < 2.2 && z < 0);
     },
     port(c) {
@@ -344,6 +453,22 @@ const BUILD = {
         part(lh, GEO.cone6, roofMat(c, COL.roof2), 0.45, 0.3, 0.45, 0, 1.85);
         ship(c);
         c.yards.push([-2.2, 0.55], [-1, 0.55], [0.2, 0.55], [1.4, 0.55], [-0.4, -0.6], [1.2, -0.6]);
+        // containers stacked by the crane
+        const boxes = [COL.troop, COL.blood, COL.amber, COL.olive, COL.civ2];
+        for (let i = 0; i < 5; i++)
+            box(c.root, wallMat(c, boxes[i]), 0.75, 0.3, 0.32, 3.4, Math.floor(i / 2) * 0.3, -0.25 + (i % 2) * 0.34 + (i === 4 ? 0.17 : 0));
+        // a fishing boat at the harbour mouth, rocking
+        const fb = new THREE.Group();
+        fb.position.set(-2.9, -0.33, 2.6);
+        fb.rotation.y = 0.5;
+        c.root.add(fb);
+        box(fb, mat(c.burnt ? COL.char : COL.white), 0.9, 0.18, 0.32, 0, -0.05, 0);
+        box(fb, mat(COL.blood), 0.92, 0.04, 0.33, 0, 0.08, 0);
+        box(fb, mat(COL.civ2), 0.25, 0.2, 0.22, -0.15, 0.12, 0);
+        box(fb, mat(COL.char2), 0.03, 0.55, 0.03, 0.15, 0.12, 0);
+        c.ticks.push(t => { fb.rotation.z = Math.sin(t * 1.4) * 0.08; fb.position.y = -0.33 + Math.sin(t * 1.1 + 1) * 0.03; });
+        if (!c.burnt)
+            gulls(c, 3);
         treeRing(c, 5, 3.9, 4.6, (x, z) => z < -2.2 && Math.abs(x) > 2.8);
     },
     base(c) {
@@ -389,6 +514,20 @@ const BUILD = {
         for (const x of [2.6, 3.3])
             vehicle(c, x, 1.6, Math.PI / 2, 'truck');
         c.yards.push([0.3, 0.7], [-0.6, 0.4], [1.0, 1.2], [-0.4, 1.3], [0.9, 0.2]);
+        // a helicopter on its pad, rotor turning slowly
+        part(c.root, GEO.cyl, mat(0x4b4f50), 1.3, 0.03, 1.3, -2.9, 0, 0.9).castShadow = false;
+        if (!c.burnt)
+            heli(c, -2.9, 0.9, 0.6, COL.olive);
+        // a radar on the headquarters roof
+        if (!c.burnt) {
+            const rd = new THREE.Group();
+            rd.position.set(2.8, 0.9, -1.5);
+            c.root.add(rd);
+            box(rd, mat(COL.steel), 0.06, 0.25, 0.06);
+            const dish = box(rd, mat(COL.white), 0.45, 0.22, 0.04, 0, 0.25, 0);
+            dish.rotation.x = -0.3;
+            c.ticks.push(t => { rd.rotation.y = t * 1.2; });
+        }
         treeRing(c, 6, 4.5, 4.9);
     },
     depot(c) {
@@ -417,6 +556,18 @@ const BUILD = {
         if (!c.burnt)
             wagons(c, -1.5, 2.6, 3);
         c.yards.push([-0.6, 0.6], [1.4, 0.6], [-2.6, 0.6], [0.4, 1.6], [-0.6, -2.6]);
+        if (!c.burnt) { // a forklift shuttling a crate between the shed and the yard
+            const fk = new THREE.Group();
+            c.root.add(fk);
+            box(fk, mat(COL.amber), 0.3, 0.18, 0.22, 0, 0.04, 0);
+            box(fk, mat(COL.char2), 0.04, 0.35, 0.2, 0.17, 0.04, 0);
+            box(fk, mat(COL.char2), 0.2, 0.03, 0.2, -0.04, 0.38, 0);
+            box(fk, mat(COL.char2), 0.02, 0.18, 0.02, -0.12, 0.2, 0.09);
+            const crate = box(fk, mat(COL.trunk), 0.2, 0.18, 0.2, 0.3, 0.06, 0);
+            c.ticks.push(t => { const u = (Math.sin(t * 0.5) + 1) / 2; fk.position.set(-1.9 + u * 1.6, 0, -0.25); crate.position.y = 0.06 + (1 - u) * 0.1; });
+        }
+        for (let i = 0; i < 3; i++)
+            box(c.root, mat(COL.sleeper), 0.36, 0.06, 0.36, 2.3 + i * 0.45, 0, 0.0); // pallets
         treeRing(c, 5, 3.9, 4.6, (x, z) => z < -2.2 && x < 1.6);
     },
     hospital(c) {
@@ -446,12 +597,20 @@ const BUILD = {
             g.position.set(x, 0, z);
             g.rotation.y = 0.2;
             c.root.add(g);
-            part(g, GEO.gable, roofMat(c, COL.khaki), 1.0, 0.6, 1.2);
-            box(g, mat(COL.char2), 0.3, 0.3, 0.02, 0, 0, 0.6); // the open flap
+            part(g, GEO.gable, roofMat(c, c.burnt ? COL.khaki : COL.white), 1.0, 0.6, 1.2);
+            box(g, mat(COL.char2), 0.3, 0.2, 0.02, 0, 0, 0.6); // the open flap
+            if (!c.burnt) {
+                box(g, mat(0x3f8f5a), 0.2, 0.06, 0.02, 0, 0.3, 0.605);
+                box(g, mat(0x3f8f5a), 0.06, 0.2, 0.02, 0, 0.23, 0.605);
+            }
         }
         vehicle(c, 0.9, 1.3, Math.PI / 2, 'ambulance');
         vehicle(c, -0.9, 1.3, Math.PI / 2, 'ambulance');
         c.yards.push([0, 1.0], [-2.3, 2.0], [0.5, 2.6], [-1.2, 1.0], [1.4, 0.5]);
+        if (!c.burnt && c.spec.state !== 'losing')
+            heli(c, 2.9, 2.9, -0.8, COL.white);
+        for (const [x, z] of [[-0.8, 1.55], [0.8, 1.55]])
+            lamp(c, x, z);
         treeRing(c, 7, 3.8, 4.6, (x, z) => z < 1.3 || x > 4);
     },
     farm(c) {
@@ -481,6 +640,24 @@ const BUILD = {
         box(c.root, mat(COL.trunk), 8, 0.04, 0.03, -0.2, 0.22, 0.35);
         vehicle(c, -3.2, 1.8, 0.4, 'tractor');
         c.yards.push([0.4, 1.6], [-0.4, 1.4], [2.6, 1.5], [-2.8, 0.8], [0.6, 0.8]);
+        // a wind pump, turning
+        const wp = new THREE.Group();
+        wp.position.set(3.4, 0, -0.4);
+        c.root.add(wp);
+        for (const [x, z] of [[-0.1, -0.1], [0.1, -0.1], [-0.1, 0.1], [0.1, 0.1]])
+            box(wp, mat(COL.steel), 0.04, 1.6, 0.04, x, 0, z);
+        const rotor = new THREE.Group();
+        rotor.position.set(0, 1.6, 0.12);
+        wp.add(rotor);
+        for (let i = 0; i < 6; i++)
+            part(rotor, GEO.limb, mat(c.burnt ? COL.char : COL.white), 0.08, 0.42, 0.02, 0, 0, 0).rotation.z = (i / 6) * Math.PI * 2;
+        box(wp, mat(COL.steel), 0.06, 0.06, 0.4, 0, 1.57, -0.15);
+        if (!c.burnt)
+            c.ticks.push(t => { rotor.rotation.z = t * 2.2; });
+        // cows in the near field
+        if (!c.ghost && c.spec.state !== 'fallen')
+            for (const [x, z, r] of [[2.4, -2.4, 0.4], [1.6, -2.9, 2.0], [3.0, -1.8, -0.8]])
+                cow(c, x, z, r);
         treeRing(c, 6, 3.9, 4.6, (x, z) => z > 1.6);
     },
     junction(c) {
@@ -514,6 +691,10 @@ const BUILD = {
         for (const [x, z] of [[-3.0, -2.2], [-1.8, -2.6], [2.4, 2.9], [-3.4, 1.9]])
             house(c, x, z, c.rnd() * 0.3, 0.8, 0.65, 0.55, COL.wall2, COL.roof3);
         c.yards.push([-1.6, 0.45], [-0.4, 0.45], [0.8, 0.45], [0.6, 2.4], [-2.0, 1.0]);
+        box(c.root, mat(COL.char2), 0.06, 1.2, 0.06, -3.4, 0, -1.0);
+        box(c.root, mat(0x3f8f5a, { glow: c.spec.night ? 0x3f8f5a : undefined }), 0.16, 0.1, 0.05, -3.4, 1.12, -0.97);
+        for (const [x, z] of [[-1.3, -1.6], [0.3, 1.0]])
+            lamp(c, x, z);
         treeRing(c, 6, 3.9, 4.6, (x, z) => Math.abs(z + 0.4) > 0.8 && Math.abs(x + z) > 1);
     },
 };
@@ -553,36 +734,71 @@ function ship(c) {
 }
 let shipHull = null;
 function vehicle(c, x, z, ry, kind) {
+    // nose along +x
     const g = new THREE.Group();
     g.position.set(x, 0, z);
     g.rotation.y = ry;
     c.root.add(g);
     const burnt = c.burnt && kind !== 'tank';
     const body = burnt ? COL.char : { truck: COL.olive, ambulance: COL.white, tractor: COL.blood, tank: COL.olive, bus: COL.amber }[kind];
-    for (const sx of [-0.25, 0.25])
-        for (const sz of [-0.17, 0.17]) {
-            const w = part(g, GEO.cyl, mat(COL.char2), 0.16, 0.08, 0.16, sx, 0.08, sz);
-            w.rotation.x = Math.PI / 2;
-            w.position.z = sz * 1.15;
-        }
+    const wheel = (wx, wz, r = 0.08) => { const w = part(g, GEO.cyl6, mat(COL.char2), r * 2, 0.07, r * 2, wx, r, wz); w.rotation.x = Math.PI / 2; w.position.y = r; };
     if (kind === 'tank') {
-        box(g, mat(COL.char2), 0.9, 0.16, 0.5);
-        box(g, mat(body), 0.85, 0.16, 0.44, 0, 0.14, 0);
-        part(g, GEO.cyl6, mat(body), 0.34, 0.14, 0.34, -0.05, 0.3, 0);
-        box(g, mat(body), 0.5, 0.05, 0.05, 0.3, 0.37, 0);
+        for (const sz of [-0.2, 0.2]) {
+            box(g, mat(0x2a2b26), 0.95, 0.16, 0.13, 0, 0, sz);
+            for (let i = 0; i < 4; i++)
+                wheel(-0.33 + i * 0.22, sz * 1.38, 0.06);
+        }
+        box(g, mat(body), 0.86, 0.13, 0.32, 0, 0.13, 0);
+        box(g, mat(body), 0.18, 0.08, 0.3, 0.42, 0.1, 0).rotation.z = -0.5; // sloped glacis
+        const tur = new THREE.Group();
+        tur.position.set(-0.06, 0.26, 0);
+        g.add(tur);
+        part(tur, GEO.cyl6, mat(body), 0.36, 0.12, 0.34);
+        box(tur, mat(0x3f4a2c), 0.6, 0.045, 0.045, 0.45, 0.06, 0); // the gun
+        part(tur, GEO.cyl6, mat(0x3f4a2c), 0.1, 0.06, 0.1, -0.05, 0.12, 0.07); // cupola
+        if (!c.burnt)
+            c.ticks.push(t => { tur.rotation.y = Math.sin(t * 0.4 + x) * 0.5; });
     }
     else if (kind === 'tractor') {
-        box(g, mat(body), 0.5, 0.2, 0.3, 0, 0.08, 0);
-        box(g, mat(COL.window), 0.22, 0.24, 0.26, -0.1, 0.28, 0);
+        wheel(-0.15, -0.17, 0.13);
+        wheel(-0.15, 0.17, 0.13);
+        wheel(0.2, -0.15, 0.07);
+        wheel(0.2, 0.15, 0.07);
+        box(g, mat(body), 0.55, 0.16, 0.22, 0.05, 0.1, 0);
+        box(g, mat(COL.window), 0.22, 0.24, 0.26, -0.12, 0.26, 0);
+        box(g, mat(body), 0.26, 0.03, 0.3, -0.12, 0.5, 0);
+        box(g, mat(COL.char2), 0.03, 0.14, 0.03, 0.2, 0.26, 0.05); // exhaust
     }
     else {
-        const len = kind === 'bus' ? 1.2 : 0.75;
-        box(g, mat(body), len, 0.3, 0.38, 0, 0.08, 0);
-        box(g, mat(kind === 'truck' ? COL.khaki : body), len * 0.62, 0.18, 0.4, -len * 0.18, 0.38, 0);
-        if (kind === 'ambulance' && !burnt)
-            box(g, mat(COL.blood), len * 0.6, 0.05, 0.39, -len * 0.18, 0.28, 0);
-        if (kind === 'bus')
-            box(g, mat(COL.window), len * 0.9, 0.1, 0.39, 0, 0.26, 0);
+        const len = kind === 'bus' ? 1.25 : 0.8;
+        for (const sx of kind === 'bus' ? [-0.42, 0.42] : [-0.25, 0.22])
+            for (const sz of [-0.19, 0.19])
+                wheel(sx, sz);
+        if (kind === 'truck') {
+            box(g, mat(body), 0.26, 0.3, 0.36, len / 2 - 0.13, 0.07, 0); // cab
+            box(g, mat(burnt ? COL.char2 : COL.window), 0.02, 0.12, 0.3, len / 2, 0.24, 0);
+            box(g, mat(COL.char2), 0.54, 0.06, 0.36, -0.13, 0.08, 0); // bed
+            if (!burnt)
+                part(g, GEO.vault, mat(COL.khaki), 0.38, 0.36, 0.52, -0.13, 0.14, 0, Math.PI / 2); // canvas tilt
+        }
+        else if (kind === 'bus') {
+            box(g, mat(body), len, 0.3, 0.4, 0, 0.07, 0);
+            box(g, mat(burnt ? COL.char2 : COL.window), len * 0.94, 0.13, 0.41, -0.01, 0.37, 0);
+            box(g, mat(burnt ? COL.char : COL.white), len, 0.05, 0.4, 0, 0.5, 0);
+            if (!burnt)
+                box(g, mat(COL.blood), len + 0.01, 0.03, 0.41, 0, 0.2, 0);
+        }
+        else { // ambulance: a box body, a red band and a blue light that flashes
+            box(g, mat(body), len, 0.32, 0.38, 0, 0.07, 0);
+            box(g, mat(burnt ? COL.char2 : COL.window), 0.02, 0.12, 0.32, len / 2, 0.24, 0);
+            if (!burnt) {
+                box(g, mat(COL.blood), len + 0.01, 0.05, 0.39, 0, 0.24, 0);
+                const on = mat(0x5a8cff, { glow: 0x3a6cff }), off = mat(0x2b3a5a);
+                const light = box(g, on, 0.08, 0.05, 0.12, len * 0.3, 0.39, 0);
+                const ph = c.rnd() * 3;
+                c.ticks.push(t => { light.material = Math.sin(t * 8 + ph) > 0 ? on : off; });
+            }
+        }
     }
     return g;
 }
@@ -605,10 +821,67 @@ function loco(c, x, z) {
     if (c.spec.state === 'secure' || c.spec.state === 'threat')
         puff(c, x + 0.45, 0.85, z, 0xe7e2d6, 0.7);
 }
+/** A helicopter parked on a pad, rotor idling. Nose along +x. */
+function heli(c, x, z, ry, color) {
+    const g = new THREE.Group();
+    g.position.set(x, 0.03, z);
+    g.rotation.y = ry;
+    c.root.add(g);
+    for (const sz of [-0.15, 0.15])
+        box(g, mat(COL.char2), 0.7, 0.03, 0.03, 0, 0, sz);
+    part(g, GEO.ball, mat(color), 0.75, 0.42, 0.42, 0.05, 0.08, 0);
+    box(g, mat(COL.window), 0.2, 0.15, 0.3, 0.3, 0.2, 0);
+    box(g, mat(color), 0.8, 0.09, 0.09, -0.65, 0.3, 0);
+    box(g, mat(color), 0.05, 0.25, 0.18, -1.02, 0.3, 0);
+    if (color === COL.white)
+        box(g, mat(COL.blood), 0.18, 0.18, 0.43, 0, 0.18, 0);
+    const rotor = new THREE.Group();
+    rotor.position.set(0.05, 0.53, 0);
+    g.add(rotor);
+    for (const a of [0, Math.PI / 2])
+        box(rotor, mat(COL.char2), 1.8, 0.02, 0.07, 0, 0, 0, a);
+    c.ticks.push(t => { rotor.rotation.y = t * 1.5; });
+}
+/** A cow, grazing: its head dips now and then. */
+function cow(c, x, z, ry) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = ry;
+    c.root.add(g);
+    const hide = c.rnd() < 0.5 ? 0x3b3631 : 0x8a5a3a;
+    for (const [lx, lz] of [[-0.12, -0.06], [-0.12, 0.06], [0.12, -0.06], [0.12, 0.06]])
+        box(g, mat(COL.char2), 0.04, 0.12, 0.04, lx, 0, lz);
+    box(g, mat(hide), 0.36, 0.16, 0.18, 0, 0.12, 0);
+    box(g, mat(COL.white), 0.12, 0.161, 0.181, -0.05, 0.12, 0);
+    const head = new THREE.Group();
+    head.position.set(0.2, 0.22, 0);
+    g.add(head);
+    box(head, mat(hide), 0.12, 0.1, 0.1, 0.05, -0.05, 0);
+    const ph = c.rnd() * 6;
+    c.ticks.push(t => { head.rotation.z = -Math.max(0, Math.sin(t * 0.6 + ph)) * 0.8; });
+}
+/** Gulls wheeling over the harbour. */
+function gulls(c, n) {
+    for (let i = 0; i < n; i++) {
+        const g = new THREE.Group();
+        c.root.add(g);
+        const w = [box(g, mat(COL.white), 0.18, 0.01, 0.06, -0.09, 0, 0), box(g, mat(COL.white), 0.18, 0.01, 0.06, 0.09, 0, 0)];
+        box(g, mat(COL.white), 0.05, 0.04, 0.12, 0, -0.02, 0).castShadow = false;
+        const r = 1.2 + c.rnd() * 1.5, ph = c.rnd() * 6, cx = (c.rnd() - 0.5) * 3, h = 2.4 + c.rnd();
+        c.ticks.push(t => {
+            const a = t * 0.6 * (i % 2 ? 1 : -1) + ph;
+            g.position.set(cx + Math.cos(a) * r, h + Math.sin(t * 2 + ph) * 0.1, 1.6 + Math.sin(a) * r * 0.6);
+            g.rotation.y = -a + (i % 2 ? 0 : Math.PI);
+            const f = Math.sin(t * 7 + ph) * 0.4;
+            w[0].rotation.z = f;
+            w[1].rotation.z = -f;
+        });
+    }
+}
 
 // ---- life.ts ----
 // Everything that changes turn to turn: troops, sandbags, the infected, civilians,
-// refugee columns, the crowd on the quay, smoke and fire.
+// refugee columns, the crowd on the quay, smoke, fire and the wreckage of a fallen place.
 /** Where refugees walk out of each place: from the first point to the second. */
 const EXIT = {
     town: [[0.6, 0.2], [4.8, 0.2]],
@@ -628,6 +901,8 @@ function populate(c) {
         sandbags(c, s.F);
     else if (s.state === 'threat')
         barricade(c);
+    if (s.state === 'losing' || dead)
+        wreckage(c, dead);
     if (s.T >= 0.05 && !dead)
         troops(c, clampN(s.T, 1, 6), infected);
     if (infected)
@@ -648,31 +923,47 @@ function populate(c) {
     if (s.state === 'losing')
         for (let i = 0; i < 3; i++) {
             const [x, z] = spot(c, 0.5, 3.5);
-            fire(c, x, z);
-            puff(c, x, 0.5, z, 0x3d3a36, 1.1);
+            fire(c, x, z, 1, i === 0);
+            puff(c, x, 0.6, z, 0x3d3a36, 1.1);
         }
-    if (dead)
+    if (dead) {
         for (let i = 0; i < 4; i++) {
             const [x, z] = spot(c, 0, 3.8);
             if (i < 2)
-                fire(c, x, z, 0.6);
+                fire(c, x, z, 0.6, i === 0);
             puff(c, x, 0.3, z, 0x2e2c2a, 1.3);
         }
+        crows(c);
+    }
 }
-/** Sandbag walls across the approaches, one course per fortification level. */
+/** Sandbag walls across the approaches, one course per fortification level, with a machine-gun
+ *  post on the road in from the threat once the place is well dug in. */
 function sandbags(c, level) {
-    const m = mat(COL.sand), r = 3.15;
+    const tones = [mat(COL.sand), mat(0xb09a6a), mat(0xc9b688)], r = 3.15;
+    let k = 0;
     for (const a0 of [0, Math.PI / 2, Math.PI, Math.PI * 1.5]) {
         if (c.spec.type === 'port' && Math.sin(a0) > 0.1)
             continue; // no walls in the harbour
-        for (let k = 0; k < level; k++) {
-            for (let a = a0 - 0.42 + (k % 2) * 0.05; a <= a0 + 0.42; a += 0.11) {
-                box(c.root, m, 0.32, 0.13, 0.2, Math.cos(a) * r, k * 0.13, Math.sin(a) * r, -a + Math.PI / 2);
+        for (let row = 0; row < level; row++) {
+            for (let a = a0 - 0.42 + (row % 2) * 0.055; a <= a0 + 0.42; a += 0.11) {
+                part(c.root, GEO.bag, tones[k++ % 3], 0.33, 0.13, 0.21, Math.cos(a) * r, row * 0.115, Math.sin(a) * r, -a + Math.PI / 2);
+            }
+        }
+        if (level >= 2 && (a0 === 0 || a0 === Math.PI)) { // a gun on a tripod looking out over the wall
+            const g = new THREE.Group();
+            g.position.set(Math.cos(a0) * (r - 0.25), level * 0.115 + 0.02, Math.sin(a0) * r);
+            g.rotation.y = -a0 + Math.PI / 2;
+            c.root.add(g);
+            box(g, mat(COL.char2), 0.05, 0.05, 0.4, 0, 0.05, 0.1);
+            box(g, mat(COL.char2), 0.08, 0.08, 0.14, 0, 0.02, -0.06);
+            for (const sx of [-1, 1]) {
+                const leg = box(g, mat(COL.char2), 0.02, 0.12, 0.02, sx * 0.06, -0.08, 0.05);
+                leg.rotation.z = sx * 0.4;
             }
         }
     }
 }
-/** Striped road barriers where the danger will come from. */
+/** Striped road barriers where the danger will come from, and a sign. */
 function barricade(c) {
     const [, [x, z]] = EXIT[c.spec.type];
     const a = Math.atan2(z, x), bx = Math.cos(a) * 3.4, bz = Math.sin(a) * 3.4;
@@ -680,48 +971,65 @@ function barricade(c) {
     g.position.set(bx, 0, bz);
     g.rotation.y = -a + Math.PI / 2;
     c.root.add(g);
-    for (const ox of [-0.4, 0.4]) {
+    for (const ox of [-0.45, 0.45]) {
         box(g, mat(COL.char2), 0.05, 0.3, 0.05, ox, 0, 0);
+        box(g, mat(COL.char2), 0.05, 0.03, 0.3, ox, 0, 0);
     }
-    for (let i = 0; i < 4; i++)
-        box(g, mat(i % 2 ? COL.white : COL.blood), 0.25, 0.1, 0.05, -0.375 + i * 0.25, 0.28, 0);
+    for (let i = 0; i < 5; i++)
+        box(g, mat(i % 2 ? COL.white : COL.blood), 0.2, 0.1, 0.05, -0.4 + i * 0.2, 0.28, 0);
+    const lampOn = mat(COL.amber, { glow: COL.amber });
+    const blink = box(g, lampOn, 0.07, 0.07, 0.07, 0.45, 0.38, 0);
+    c.ticks.push(t => { blink.visible = Math.sin(t * 5) > 0; });
 }
-/** Legs swing as a figure walks; phase offsets keep a crowd out of step. */
+/** Legs swing as a figure walks, and arms against them; phase offsets keep a crowd out of step. */
 function stride(f, t, speed) {
     const a = Math.sin(t * speed) * 0.5;
     f.legs[0].rotation.x = a;
     f.legs[1].rotation.x = -a;
+    if (f.armSwing) {
+        f.arms[0].rotation.x = -a * 0.8;
+        f.arms[1].rotation.x = a * 0.8;
+    }
 }
 function troops(c, battalions, fighting) {
     for (let b = 0; b < battalions; b++) {
         const [cx, cz] = b < c.yards.length ? c.yards[b] : spot(c, 1.5, 3);
         const face = Math.atan2(cx, cz) + (c.rnd() - 0.5) * 0.6; // face outward, toward the threat
         for (let i = 0; i < 3; i++) {
-            const f = person(COL.troop, { helmet: COL.olive, head: COL.skin });
-            const ox = (i - 1) * 0.28, oz = i === 1 ? -0.15 : 0;
+            const f = person(COL.troop, { helmet: COL.olive, legs: 0x2f3329, pose: 'rifle' });
+            box(f.g, mat(0x4a5636), 0.17, 0.2, 0.09, 0, 0.24, -0.13); // pack
+            const ox = (i - 1) * 0.3, oz = i === 1 ? -0.17 : 0;
             f.g.position.set(cx + Math.cos(face) * ox + Math.sin(face) * oz, 0, cz - Math.sin(face) * ox + Math.cos(face) * oz);
             f.g.rotation.y = face;
-            box(f.g, mat(COL.char2), 0.04, 0.04, 0.3, 0.08, 0.26, 0.12); // rifle
+            if (i === 1 && fighting) {
+                f.g.scale.y = 0.75;
+            } // the middle one kneels to fire
             c.root.add(f.g);
             if (fighting) { // muzzle flashes
-                const flash = box(f.g, mat(COL.glow, { glow: COL.glow }), 0.08, 0.08, 0.08, 0.08, 0.24, 0.32);
+                const flash = part(f.g, GEO.ball, mat(COL.glow, { glow: COL.glow }), 0.12, 0.12, 0.12, 0.04, 0.3, 0.5);
                 flash.castShadow = false;
                 const ph = c.rnd() * 10;
-                c.ticks.push(t => { flash.visible = Math.sin(t * 9 + ph) > 0.85; });
+                c.ticks.push(t => { const on = Math.sin(t * 9 + ph) > 0.8; flash.visible = on; if (on)
+                    flash.scale.setScalar(0.08 + Math.random() * 0.08); });
             }
         }
         if (b % 2 === 1)
-            vehicle(c, cx + Math.sin(face) * -0.7, cz + Math.cos(face) * -0.7, face + Math.PI / 2, c.spec.type === 'base' || battalions >= 4 ? 'tank' : 'truck');
+            vehicle(c, cx + Math.sin(face) * -0.75, cz + Math.cos(face) * -0.75, face + Math.PI / 2, c.spec.type === 'base' || battalions >= 4 ? 'tank' : 'truck');
     }
 }
+/** The infected: mostly shamblers reaching forward, a few lean runners, and in a big horde a brute. */
 function zombies(c, n, heldOff) {
-    const shirts = [COL.zedShirt, 0x5b6470, 0x7a6a50, 0x4d5a4a, COL.blood];
+    const shirts = [COL.zedShirt, 0x5b6470, 0x7a6a50, 0x4d5a4a, COL.blood, 0x8a8478];
     for (let i = 0; i < n; i++) {
-        const f = person(shirts[Math.floor(c.rnd() * shirts.length)], { head: COL.zed });
-        for (const side of [-1, 1])
-            box(f.g, mat(COL.zed), 0.05, 0.05, 0.24, side * 0.09, 0.27, 0.1); // arms out in front
+        const kind = i > 0 && i % 9 === 0 ? 'brute' : i % 4 === 3 ? 'runner' : 'walker';
+        const f = kind === 'brute'
+            ? person(0x5d6a49, { head: COL.zed, arms: COL.zed, legs: 0x3a342c, pose: 'walk', scale: 1.15, broad: 1.45 })
+            : person(shirts[Math.floor(c.rnd() * shirts.length)], { head: COL.zed, arms: COL.zed, legs: 0x4a4438, pose: kind === 'runner' ? 'walk' : 'reach', scale: kind === 'runner' ? 0.95 : 1 });
+        if (kind === 'brute')
+            f.arms.forEach(a => { a.rotation.x = -0.2; });
         c.root.add(f.g);
-        const a0 = c.rnd() * Math.PI * 2, ph = c.rnd() * 20, sp = 0.05 + c.rnd() * 0.05, lean = 0.15 + c.rnd() * 0.2;
+        const a0 = c.rnd() * Math.PI * 2, ph = c.rnd() * 20, lean = kind === 'runner' ? 0.5 : 0.15 + c.rnd() * 0.2;
+        const sp = (0.05 + c.rnd() * 0.05) * (kind === 'runner' ? 1.8 : kind === 'brute' ? 0.7 : 1), gait = kind === 'runner' ? 7 : kind === 'brute' ? 2 : 3;
         f.g.rotation.z = (c.rnd() - 0.5) * 0.2;
         if (heldOff) {
             // a held place: they keep coming in from the rim and are cut down at the wire
@@ -731,36 +1039,46 @@ function zombies(c, n, heldOff) {
                 const r = r0 - (r0 - r1) * u, a = a0 + Math.sin(t * 0.3 + ph) * 0.05;
                 f.g.position.set(Math.cos(a) * r, 0, Math.sin(a) * r);
                 f.g.rotation.y = Math.atan2(-Math.cos(a), -Math.sin(a));
-                f.g.rotation.x = lean;
-                f.g.visible = u < 0.94;
-                stride(f, t + ph, 3);
+                f.g.rotation.x = u > 0.9 ? lean + (u - 0.9) * 14 : lean; // falls as it is hit
+                f.g.visible = u < 0.97;
+                stride(f, t + ph, gait * 1.3);
             });
         }
         else {
             // overrun: they wander the streets
-            const [hx, hz] = spot(c, 0.3, 4.2);
+            const [hx, hz] = spot(c, 0.3, 4.2), rr = kind === 'runner' ? 0.6 : 0.35;
             c.ticks.push(t => {
-                const a = t * 0.25 * (i % 2 ? 1 : -1) + ph;
-                const x = hx + Math.cos(a) * 0.35, z = hz + Math.sin(a * 1.3) * 0.35;
+                const a = t * 0.25 * (i % 2 ? 1 : -1) * (kind === 'runner' ? 2 : 1) + ph;
+                const x = hx + Math.cos(a) * rr, z = hz + Math.sin(a * 1.3) * rr;
                 f.g.rotation.y = Math.atan2(x - f.g.position.x, z - f.g.position.z) || f.g.rotation.y;
                 f.g.position.set(x, 0, z);
                 f.g.rotation.x = lean;
-                stride(f, t + ph, 2.5);
+                stride(f, t + ph, gait);
             });
         }
     }
 }
-const civColor = (c) => [COL.civ, COL.civ2, COL.civ3, COL.wall3][Math.floor(c.rnd() * 4)];
+/** A civilian, dressed one of a few ways: shirt, coat, or hat; a quarter of them children. */
+function civilian(c, child = c.rnd() < 0.2) {
+    const color = [COL.civ, COL.civ2, COL.civ3, COL.wall3, 0x9a6b8a, 0x6f8f6a][Math.floor(c.rnd() * 6)];
+    const v = c.rnd(), hair = [0x4a3326, 0x2b2622, 0xb89a5e, 0x8a5a3a][Math.floor(c.rnd() * 4)];
+    return person(color, {
+        scale: child ? 0.68 : 1,
+        legs: v < 0.33 ? 0x46526a : COL.char2,
+        hair: v < 0.66 ? hair : undefined,
+        hat: v >= 0.66 ? COL.char2 : undefined,
+    });
+}
 function bystanders(c, n, scared) {
     for (let i = 0; i < n; i++) {
-        const f = person(civColor(c));
+        const f = civilian(c);
         const [x, z] = spot(c, 0.5, 2.5);
         f.g.position.set(x, 0, z);
         f.g.rotation.y = c.rnd() * 6;
         c.root.add(f.g);
         const ph = c.rnd() * 10;
         if (scared)
-            c.ticks.push(t => { f.g.rotation.y = Math.sin(t * 2 + ph) * 1.5; });
+            c.ticks.push(t => { f.g.rotation.y = Math.sin(t * 2 + ph) * 1.5; f.arms[0].rotation.x = -0.4 - Math.max(0, Math.sin(t * 3 + ph)) * 1.6; });
     }
 }
 /** A column of refugees walking out along the exit road, with a bus at its head. */
@@ -769,9 +1087,11 @@ function refugees(c, n) {
     const dir = Math.atan2(x2 - x1, z2 - z1);
     vehicle(c, x1 + (x2 - x1) * 0.82, z1 + (z2 - z1) * 0.82, dir - Math.PI / 2, 'bus');
     for (let i = 0; i < n; i++) {
-        const f = person(civColor(c), { scale: c.rnd() < 0.25 ? 0.7 : 1 }); // some children
+        const f = civilian(c, c.rnd() < 0.25);
         if (c.rnd() < 0.5)
-            box(f.g, mat(COL.trunk), 0.16, 0.14, 0.1, 0.12, 0.12, 0); // a suitcase
+            box(f.g, mat(c.rnd() < 0.5 ? COL.trunk : COL.troop), 0.18, 0.16, 0.1, 0.17, 0.05, 0); // a suitcase
+        else
+            box(f.g, mat(0x6b5236), 0.2, 0.22, 0.1, 0, 0.26, -0.15); // a rucksack
         f.g.rotation.y = dir;
         c.root.add(f.g);
         const off = (c.rnd() - 0.5) * 0.35, ph = i / n;
@@ -782,23 +1102,27 @@ function refugees(c, n) {
         });
     }
 }
-/** People waiting on the quay for the next ship, facing the water. */
+/** People waiting on the quay for the next ship, facing the water, some waving. */
 function quayCrowd(c, n) {
     for (let i = 0; i < n; i++) {
-        const f = person(civColor(c), { scale: c.rnd() < 0.2 ? 0.7 : 1 });
+        const f = civilian(c);
         f.g.position.set(-3.3 + c.rnd() * 5.4, 0, 0.25 + c.rnd() * 0.8);
         f.g.rotation.y = (c.rnd() - 0.5) * 0.8;
         c.root.add(f.g);
-        const ph = c.rnd() * 10;
-        c.ticks.push(t => { f.g.position.y = Math.max(0, Math.sin(t * 1.5 + ph)) * 0.02; });
+        const ph = c.rnd() * 10, waves = c.rnd() < 0.3;
+        c.ticks.push(t => {
+            f.g.position.y = Math.max(0, Math.sin(t * 1.5 + ph)) * 0.02;
+            if (waves)
+                f.arms[1].rotation.x = -2.6 + Math.sin(t * 6 + ph) * 0.4;
+        });
     }
 }
-/** A rising column of smoke: a few puffs that drift up, grow and fade, then start again. */
+/** A rising column of smoke: puffs that drift up and downwind, grow and fade, then start again. */
 function puff(c, x, y, z, color, size) {
     const balls = [];
-    const m = mat(color, { opacity: 0.55 });
-    for (let i = 0; i < 5; i++) {
-        const b = part(c.root, GEO.ball, m, 1, 1, 1, x, y, z);
+    const ms = [mat(color, { opacity: 0.6 }), mat(new THREE.Color(color).multiplyScalar(1.25).getHex(), { opacity: 0.45 })];
+    for (let i = 0; i < 7; i++) {
+        const b = part(c.root, GEO.ball, ms[i % 2], 1, 1, 1, x, y, z);
         b.castShadow = false;
         b.receiveShadow = false;
         balls.push(b);
@@ -806,27 +1130,86 @@ function puff(c, x, y, z, color, size) {
     const ph = c.rnd() * 5;
     c.ticks.push(t => {
         balls.forEach((b, i) => {
-            const u = ((t * 0.12 + ph + i / balls.length) % 1);
-            const s = size * (0.25 + u * 0.9);
-            b.scale.set(s, s, s);
-            b.position.set(x + Math.sin(u * 3 + ph) * 0.3 + u * 0.6, y + u * 2.6, z + u * 0.2);
+            const u = ((t * 0.11 + ph + i / balls.length) % 1);
+            const s = size * (0.25 + u * 1.05);
+            b.scale.set(s, s * 0.85, s);
+            b.position.set(x + Math.sin(u * 3 + ph + i) * 0.25 + u * u * 1.1, y + u * 3.0, z + u * 0.3);
         });
     });
 }
-function fire(c, x, z, size = 1) {
+/** A fire: a glowing bed of embers and three flickering tongues of flame; the first fire of a
+ *  scene also throws a flickering light, which shows best at night. */
+function fire(c, x, z, size = 1, light = false) {
     const g = new THREE.Group();
     g.position.set(x, 0, z);
     c.root.add(g);
-    const outer = part(g, GEO.cone6, mat(0xe2642a, { glow: 0xc4432f }), 0.45 * size, 0.6 * size, 0.45 * size);
-    const inner = part(g, GEO.cone6, mat(COL.glow, { glow: COL.amber }), 0.25 * size, 0.4 * size, 0.25 * size);
-    outer.castShadow = inner.castShadow = false;
-    const ph = c.rnd() * 10;
+    const bed = part(g, GEO.disc, mat(0x7a2a1a, { glow: 0xc4432f }), 0.7 * size, 0.03, 0.7 * size);
+    bed.castShadow = false;
+    const flames = []; // each tongue, its height and its phase
+    for (let i = 0; i < 3; i++) {
+        const a = i * 2.1, r = i ? 0.14 * size : 0, k = i ? 0.72 : 1;
+        const outer = part(g, GEO.cone6, mat(0xe2642a, { glow: 0xc4432f }), 0.36 * size, 0.6 * size, 0.36 * size, Math.cos(a) * r, 0, Math.sin(a) * r);
+        const inner = part(g, GEO.cone6, mat(COL.glow, { glow: COL.amber }), 0.2 * size, 0.38 * size, 0.2 * size, Math.cos(a) * r, 0, Math.sin(a) * r);
+        outer.castShadow = inner.castShadow = false;
+        flames.push([outer, 0.6 * size * k, c.rnd() * 10], [inner, 0.38 * size * k, c.rnd() * 10]);
+    }
+    let lamp = null;
+    if (light) {
+        lamp = new THREE.PointLight(0xff9a4a, c.spec.night ? 1.6 : 0.6, 4.5, 2);
+        lamp.position.set(0, 0.6, 0);
+        g.add(lamp);
+    }
     c.ticks.push(t => {
-        const f = 1 + Math.sin(t * 13 + ph) * 0.15 + Math.sin(t * 7.3 + ph) * 0.1;
-        outer.scale.y = 0.6 * size * f;
-        inner.scale.y = 0.4 * size * (2 - f);
+        for (const [m, h, ph] of flames)
+            m.scale.y = h * (1 + Math.sin(t * 13 + ph) * 0.18 + Math.sin(t * 7.3 + ph) * 0.12);
         g.rotation.y = t * 0.8;
+        if (lamp)
+            lamp.intensity = (c.spec.night ? 1.6 : 0.6) * (0.8 + Math.sin(t * 17) * 0.1 + Math.sin(t * 5.3) * 0.1);
     });
+}
+/** Signs of a place being overrun: blood on the ground, the dead, an abandoned car and rubble. */
+function wreckage(c, fallen) {
+    const blood = mat(0x6a221c);
+    for (let i = 0; i < (fallen ? 7 : 4); i++) {
+        const [x, z] = spot(c, 0.3, 3.6), s = 0.25 + c.rnd() * 0.35;
+        const d = part(c.root, GEO.disc, blood, s, 0.012, s * (0.6 + c.rnd() * 0.5), x, 0.01, z, c.rnd() * 3);
+        d.castShadow = false;
+    }
+    for (let i = 0; i < (fallen ? 4 : 2); i++) {
+        const f = civilian(c, false), [x, z] = spot(c, 0.4, 3.6);
+        f.g.position.set(x, 0.06, z);
+        f.g.rotation.set(-Math.PI / 2, c.rnd() * 6, 0, 'YXZ');
+        f.arms[0].rotation.x = -1.2;
+        c.root.add(f.g);
+    }
+    const [cx, cz] = spot(c, 1, 3.4);
+    const wreck = car(c, cx, cz, c.rnd() * 6, fallen ? COL.char : 0x7f93a6);
+    wreck.rotation.z = fallen ? 0.25 : 0;
+    if (fallen)
+        for (let i = 0; i < 5; i++) {
+            const [x, z] = spot(c, 0.5, 3.8), s = 0.15 + c.rnd() * 0.2;
+            box(c.root, mat(i % 2 ? COL.char2 : 0x6e665a), s, s * 0.6, s, x, 0, z, c.rnd() * 3).rotation.x = c.rnd() * 0.4;
+        }
+}
+/** Crows circling over a fallen place. */
+function crows(c) {
+    const m = mat(0x1c1a18);
+    for (let i = 0; i < 4; i++) {
+        const g = new THREE.Group();
+        c.root.add(g);
+        const body = box(g, m, 0.06, 0.04, 0.16, 0, 0, 0);
+        const wings = [box(g, m, 0.2, 0.01, 0.07, -0.1, 0.02, 0), box(g, m, 0.2, 0.01, 0.07, 0.1, 0.02, 0)];
+        body.castShadow = false;
+        const r = 1 + c.rnd() * 1.6, h = 3 + c.rnd() * 1.2, ph = c.rnd() * 6, cx = (c.rnd() - 0.5) * 2, cz = (c.rnd() - 0.5) * 2;
+        c.ticks.push(t => {
+            const a = t * 0.5 + ph;
+            g.position.set(cx + Math.cos(a) * r, h + Math.sin(t * 1.3 + ph) * 0.15, cz + Math.sin(a) * r);
+            g.rotation.y = -a;
+            const flap = Math.sin(t * 9 + ph) * 0.5;
+            wings[0].rotation.z = flap;
+            wings[1].rotation.z = -flap;
+        });
+    }
 }
 
 // ---- viewer.ts ----
@@ -903,10 +1286,11 @@ function fire(c, x, z, size = 1) {
         h = nh;
         renderer.setSize(w, h, false);
         camera.aspect = w / Math.max(1, h);
-        // pull back on narrow boxes so the whole diorama fits
-        const dist = 15.5 + Math.max(0, 2 - camera.aspect) * 7;
-        camera.position.set(0, dist * 0.62, dist * 0.78);
-        camera.lookAt(0, 0.5, 0);
+        // A lowish three-quarter view: the round slab fills a wide panel and people show their sides.
+        // Pull back on narrow boxes so the whole diorama fits.
+        const dist = 14.2 + Math.max(0, 2 - camera.aspect) * 7;
+        camera.position.set(0, dist * 0.53, dist * 0.85);
+        camera.lookAt(0, 0.45, 0.7);
         camera.updateProjectionMatrix();
     }
     function draw() {
