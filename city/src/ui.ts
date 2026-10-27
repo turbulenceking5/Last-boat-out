@@ -71,7 +71,7 @@ function refreshPanel(force: boolean) {
   if (UI.sel.length) {
     html = UI.sel.slice(0, 6).map(u => {
       const s = UNITS[u.kind], hp = u.members.reduce((a, m) => a + m.hp, 0), max = s.members * s.hp;
-      return `<div class="unit"><div class="row"><b>${esc(u.name)}</b><span>${s.vehicle ? '' : `${u.members.length}/${s.members} men · `}${u.kills} kills</span></div>${bar(hp, max, hp < max * 0.35 ? 'low' : '')}<p class="note">${u.goal >= 0 ? 'Moving' : 'Holding and firing at anything in range'} · range ${s.range}</p></div>`;
+      return `<div class="unit"><div class="row"><b>${esc(u.name)}</b><span>${s.vehicle ? '' : `${u.members.length}/${s.members} men · `}${u.kills} kills</span></div>${bar(hp, max, hp < max * 0.35 ? 'low' : '')}<p class="note">${u.goal >= 0 ? 'Moving' : 'Holding and firing at anything in range'} · range ${s.range}</p>${u.kind === 'apc' ? `<p class="note">Carrying <b>${u.cargo}</b> of 60 civilians. Tap a block to load people, then tap near an evacuation point to drop them off.</p>` : ''}</div>`;
     }).join('') + (UI.sel.length > 6 ? `<p class="note">and ${UI.sel.length - 6} more</p>` : '') +
       `<p class="note">Tap a street to move. Right-click also moves. Esc to deselect.</p><button data-act="desel" class="btn">Deselect</button>`;
   } else if (UI.block) {
@@ -89,12 +89,17 @@ function refreshPanel(force: boolean) {
   } else {
     html = `<p class="note">Tap a block to evacuate it or raise militia. Tap a unit to command it. Drag to pan, scroll or pinch to zoom.</p>`;
   }
+  const ms = $('#missions');
+  ms.hidden = !G.missions.length;
+  const mHtml = G.missions.length ? `<h2>Missions</h2>` + G.missions.map(m => `<div class="mission"><p>${m.kind === 'crate' ? `Supply drop · $${m.reward}` : `${m.people} survivors · $${m.reward}`} <b class="${m.t < 15 ? 'urgent' : ''}">${Math.ceil(m.t)}s</b></p><button data-act="goto" data-x="${m.x}" data-z="${m.z}">Show</button></div>`).join('') : '';
+  if (ms.innerHTML !== mHtml) ms.innerHTML = mHtml;
   const logHtml = G.log.slice(0, 14).map(l => `<li class="${l.kind}"><time>${fmtTime(GAME_SECONDS - l.t)}</time>${esc(l.text)}</li>`).join('');
   const key = html + logHtml;
   if (!force && key === UI.lastPanelKey) return;
   UI.lastPanelKey = key;
   $('#sel').innerHTML = html;
   $('#side').classList.toggle('empty', !UI.sel.length && !UI.block && !UI.evac);
+  $('#side').classList.toggle('has-missions', G.missions.length > 0);
   $('#log').innerHTML = logHtml;
 }
 
@@ -112,17 +117,31 @@ function showOverlay(which: '' | 'start' | 'help' | 'end') {
       <ul><li>People shelter at home until you order a block to evacuate, or the infected come close and they panic. Evacuees walk to the nearest evacuation point and wait for a ship or bus.</li>
       <li>The infected hunt the nearest people: anyone in the streets, crowds at the evacuation points, your troops, and blocks they can break into.</li>
       <li>Your troops fire at anything in range on their own. Money comes in steadily, plus a bounty for every kill and every person evacuated.</li>
+      <li><b>APCs rescue people:</b> select one and tap a block to load up to 60, then tap near an evacuation point to drop them off.</li>
+      <li><b>Missions</b> pop up on the map: supply drops worth money, and survivors on rooftops who need any unit to reach them before the infected do.</li>
+      <li>Watch for <b>runners</b> (fast, red shirts, go down easily) and <b>brutes</b> (huge, soak up fire, smash doors in). At minute 8 a great horde arrives from the east.</li>
       <li>Each figure stands for 10 people.</li></ul>${controls}
       <div class="btns"><button class="btn primary" data-act="${which === 'start' ? 'begin' : 'closehelp'}">${which === 'start' ? 'Take command' : 'Back to the city'}</button><a class="btn" href="../">The original game</a></div></div>`;
   } else {
     const o = G.over!, s = G.stats;
     ov.innerHTML = `<div class="card ${o.pct >= 30 ? '' : 'red'}"><span class="eyebrow">${o.why === 'time' ? 'The last ship has sailed' : 'The city is empty'}</span><h1>${esc(o.grade)}</h1>
       <p class="big">${o.pct.toFixed(0)}% of the city saved</p>
-      <div class="stats"><div><b>${fmtPeople(s.evacuated)}</b><span>Evacuated</span></div><div><b>${fmtPeople(s.dead)}</b><span>Dead</span></div><div><b>${s.killed * PER_AGENT}</b><span>Infected destroyed</span></div><div><b>${s.unitsLost}</b><span>Units lost</span></div><div><b>$${s.spent}</b><span>Spent</span></div></div>
+      <div class="stats"><div><b>${fmtPeople(s.evacuated)}</b><span>Evacuated</span></div><div><b>${fmtPeople(s.dead)}</b><span>Dead</span></div><div><b>${s.killed * PER_AGENT}</b><span>Infected destroyed</span></div><div><b>${s.unitsLost}</b><span>Units lost</span></div><div><b>${s.missions}</b><span>Missions done</span></div><div><b>${fmtPeople(s.ferried)}</b><span>Rescued by APC</span></div><div><b>$${s.spent}</b><span>Spent</span></div></div>
       <p class="note">Grades: 60% Saviour of the city, 45% An orderly withdrawal, 30% A bitter retreat.</p>
       <div class="btns"><button class="btn primary" data-act="again">Play again</button><a class="btn" href="../">The original game</a></div></div>`;
   }
   (ov.querySelector('.btn.primary') as HTMLElement | null)?.focus();
+}
+
+function syncMute() {
+  const b = document.getElementById('mute');
+  if (b) { b.textContent = AUD.muted ? '🔇' : '🔊'; b.setAttribute('aria-label', AUD.muted ? 'Sound off' : 'Sound on'); }
+}
+
+function updateAlert() {
+  const el = $('#alert'), on = !!G.alert && G.t < G.alert.until;
+  if (on && el.textContent !== G.alert!.text) el.textContent = G.alert!.text;
+  el.hidden = !on;
 }
 
 function pickUnit(x: number, z: number): Unit | null {
@@ -151,6 +170,9 @@ function tapAt(clientX: number, clientY: number, right: boolean, shift: boolean)
   const c = cellOf(p.x, p.z), bi = G.blockAt[c];
   const e = G.evacs.find(e => dist2(e.x, e.z, p.x, p.z) < (e.kind === 'harbor' ? 9 : 4));
   if (UI.sel.length && walkable(c) && !e) { moveUnits(UI.sel, p.x, p.z); return; }
+  const apcs = UI.sel.filter(u => u.kind === 'apc');
+  if (apcs.length && bi >= 0 && G.blocks[bi].pop > 0) { sendToBlock(apcs, G.blocks[bi]); toast(`APC heading to ${G.blocks[bi].name} to take people aboard.`); return; }
+  if (UI.sel.length && e) { moveUnits(UI.sel, e.x, e.z); return; }
   UI.sel = [];
   UI.block = bi >= 0 && G.blocks[bi].district !== 'park' ? G.blocks[bi] : null;
   UI.evac = UI.block ? null : e ?? null;
@@ -162,6 +184,7 @@ function bindInput(canvas: HTMLCanvasElement) {
   let pinch = 0;
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('pointerdown', e => {
+    startAudio();
     canvas.setPointerCapture(e.pointerId);
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false });
     if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); }
@@ -196,8 +219,11 @@ function bindInput(canvas: HTMLCanvasElement) {
     if (t.dataset.order) { setMode(t.dataset.order as Order); return; }
     if (t.dataset.speed) { G.speed = Number(t.dataset.speed); return; }
     switch (t.dataset.act) {
-      case 'begin': case 'closehelp': showOverlay(''); break;
+      case 'begin': startAudio(); showOverlay(''); break;
+      case 'closehelp': showOverlay(''); break;
       case 'help': showOverlay('help'); break;
+      case 'mute': setMuted(!AUD.muted); syncMute(); break;
+      case 'goto': Object.assign(V.cam, { x: Number(t.dataset.x), z: Number(t.dataset.z), dist: Math.min(V.cam.dist, 40) }); break;
       case 'again': newGame(Math.floor(Math.random() * 1e9)); resetView(); showOverlay(''); break;
       case 'cancel': setMode(null); break;
       case 'desel': UI.sel = []; refreshPanel(true); break;
@@ -217,6 +243,7 @@ function bindInput(canvas: HTMLCanvasElement) {
     if (k === 'a' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); UI.sel = G.units.slice(); UI.block = null; UI.evac = null; refreshPanel(true); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (k === '?') { showOverlay('help'); return; }
+    if (k === 'm') { setMuted(!AUD.muted); syncMute(); return; }
     if (k === '+' || k === '=') { G.speed = Math.min(4, Math.max(1, G.speed * 2)); return; }
     if (k === '-') { G.speed = G.speed <= 1 ? 1 : G.speed / 2; return; }
     if (k === 'q') V.cam.yaw -= Math.PI / 8;
@@ -244,6 +271,8 @@ function resetView() {
   helis.clear();
   for (const j of jets.values()) V.scene.remove(j);
   jets.clear();
+  for (const b of beacons.values()) V.scene.remove(b);
+  beacons.clear();
   G.changed = true;
   setMode(null);
   refreshPanel(true);

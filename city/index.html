@@ -75,6 +75,16 @@ button{cursor:pointer}
 .bb:hover{border-color:var(--amber)}
 #hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));background:#3a2f17;border:1px solid var(--amber);border-radius:4px;padding:7px 10px;z-index:6;max-width:calc(100% - 20px);display:flex;gap:10px;align-items:center}
 #hint button{background:none;border:1px solid var(--amber);border-radius:3px;padding:2px 8px}
+#alert{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);background:rgba(74,31,24,.92);border:2px solid var(--blood);border-radius:6px;padding:14px 22px;z-index:8;font:22px/1.25 var(--font-display);text-align:center;max-width:calc(100% - 32px);animation:alertpulse 1s ease-in-out infinite alternate;pointer-events:none}
+@keyframes alertpulse{from{box-shadow:0 0 0 rgba(196,67,47,.0)}to{box-shadow:0 0 40px rgba(196,67,47,.7)}}
+@media (prefers-reduced-motion:reduce){#alert{animation:none}}
+#missions{display:flex;flex-direction:column;gap:6px;border-color:rgba(226,162,58,.5)!important}
+#missions h2{margin:0;font:600 11px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--amber)}
+.mission{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.mission p{margin:0;font-size:13.5px}
+.mission b{font:600 13px var(--font-num)}
+.mission .urgent{color:#ec9a8b}
+.mission button{background:var(--panel-2);border:1px solid rgba(226,220,200,.22);border-radius:4px;padding:3px 9px;min-height:30px}
 #toast{position:fixed;left:50%;transform:translateX(-50%);top:110px;background:#4a1f18;border:1px solid var(--blood);border-radius:4px;padding:8px 12px;z-index:7}
 
 #overlay{position:fixed;inset:0;background:rgba(6,8,10,.72);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20;overflow-y:auto}
@@ -102,7 +112,11 @@ button{cursor:pointer}
   .hide-sm{display:none}
   #side{top:auto;left:10px;right:10px;width:auto;bottom:calc(84px + env(safe-area-inset-bottom,0px));max-height:34vh}
   #logbox{display:none}
-  #side.empty{display:none}
+  #missions{order:2}
+  #side.empty #missions:not([hidden]){display:flex}
+  #side.empty{display:flex}
+  #side.empty #sel{display:none}
+  #side.empty:not(.has-missions){display:none}
   #bar{right:10px}
   .bb{flex:0 0 96px}
   #hint{bottom:calc(84px + env(safe-area-inset-bottom,0px) + 36vh)}
@@ -127,15 +141,18 @@ button{cursor:pointer}
     <button class="sb" data-speed="2" aria-label="Double speed">2×</button>
     <button class="sb" data-speed="4" aria-label="Four times speed">4×</button>
   </div>
+  <button class="sb" data-act="mute" id="mute" aria-label="Sound on" title="Sound (M)">🔊</button>
   <button class="sb" data-act="help" aria-label="Field manual">?</button>
 </header>
 <aside id="side">
+  <section id="missions" aria-live="polite" hidden></section>
   <section id="sel" aria-live="polite"></section>
   <section id="logbox"><h2>Dispatches</h2><ol id="log"></ol></section>
 </aside>
 <nav id="bar" aria-label="Orders and purchases"></nav>
 <div id="hint" hidden></div>
 <div id="toast" role="alert" hidden></div>
+<div id="alert" role="alert" hidden></div>
 <div id="overlay" hidden></div>
 <div id="no3d" class="overlay-msg" style="position:fixed;inset:0;align-items:center;justify-content:center;padding:20px;text-align:center">
   <p>The city needs WebGL and Three.js, which couldn't load here. <a href="../">Play the original Last Boat to Calder</a> instead.</p>

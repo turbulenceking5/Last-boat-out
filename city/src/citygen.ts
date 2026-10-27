@@ -60,7 +60,7 @@ function generateCity(rnd: () => number) {
 
 const PAL = {
   stone: 0xc9c1ab, sand: 0xd8cbb0, cream: 0xe4dfcf, brick: 0xa0644a, brick2: 0x8a5a44, slate: 0x7d8790, glass: 0x8fa3ad,
-  concrete: 0xa9a59a, rust: 0x9a6b4a, white: 0xeeeae0, roofRed: 0x8a4b3a, roofGrey: 0x5d6b72, roofBrown: 0x6e5a48, tar: 0x4a4a46,
+  concrete: 0xa9a59a, tankPaint: 0xb3ad9c, rust: 0x9a6b4a, white: 0xeeeae0, roofRed: 0x8a4b3a, roofGrey: 0x5d6b72, roofBrown: 0x6e5a48, tar: 0x4a4a46,
 };
 const pick = <T>(rnd: () => number, a: T[]) => a[Math.floor(rnd() * a.length)];
 
@@ -84,8 +84,8 @@ function furnish(b: Block, rnd: () => number) {
       break;
     case 'industrial':
       add(2.4, 2.2, 4.2, 3.6, 2.2 + rnd() * 0.8, pick(rnd, [PAL.concrete, PAL.rust]), PAL.roofGrey, 'shed');
-      add(4.9, 4.9, 1.6, 1.6, 1.8, PAL.white, PAL.concrete, 'tank');
-      if (rnd() < 0.6) add(1.6, 5.0, 1.4, 1.4, 1.5, PAL.white, PAL.concrete, 'tank');
+      add(4.9, 4.9, 1.6, 1.6, 1.8, PAL.tankPaint, PAL.concrete, 'tank');
+      if (rnd() < 0.6) add(1.6, 5.0, 1.4, 1.4, 1.5, PAL.tankPaint, PAL.concrete, 'tank');
       break;
     case 'docks':
       add(3, 1.6, 5.4, 2.4, 2.0, pick(rnd, [PAL.rust, PAL.concrete, PAL.brick2]), PAL.roofGrey, 'shed');

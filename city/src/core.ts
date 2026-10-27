@@ -35,8 +35,10 @@ interface Block {
   convertT: number;                 // once breached, the next person inside is caught after this
 }
 
-/** rise: seconds until a newly bitten victim gets back up; they lie still until then. */
-interface Zed { x: number; z: number; hp: number; cd: number; sp: number; ph: number; hd: number; shirt: number; wx: number; wz: number; rise: number }
+/** rise: seconds until a newly bitten victim gets back up; they lie still until then. march: part of the great horde, heading into the city. */
+interface Zed { x: number; z: number; hp: number; cd: number; sp: number; ph: number; hd: number; shirt: number; wx: number; wz: number; rise: number; kind: ZedKind; march: boolean }
+/** Walkers shamble; runners sprint at crowds but fall fast; brutes soak up fire and smash doors in. */
+const enum ZedKind { Walker, Runner, Brute }
 /** Civilians are removed by setting gone, then compacted at the end of the tick, so hash indices stay valid. */
 interface Civ { x: number; z: number; sp: number; ph: number; hd: number; color: number; gone: boolean }
 
@@ -51,6 +53,8 @@ interface Unit {
   aim: { x: number; z: number } | null; // what the main gun is pointed at (tanks)
   kills: number;
   people: number;          // militia are residents: survivors leave on the last ship
+  cargo: number;           // APCs: civilians aboard
+  loadT: number;
 }
 
 interface UnitSpec { name: string; cost: number; members: number; hp: number; dmg: number; range: number; rof: number; acc: number; speed: number; splash: number; vehicle: boolean; spread: number }
@@ -68,6 +72,12 @@ interface Gunship { x: number; z: number; t: number; ang: number; cd: number; hx
 
 type Order = 'militia' | 'infantry' | 'apc' | 'tank' | 'strike' | 'gunship' | 'evac';
 const ORDER_COST: Record<Order, number> = { militia: 100, infantry: 300, apc: 700, tank: 1200, strike: 500, gunship: 1000, evac: 300 };
+
+/** Pop-up objectives: a supply crate to grab, or survivors to reach before the infected do. */
+interface Mission { id: number; kind: 'crate' | 'survivors'; x: number; z: number; t: number; people: number; reward: number; biteT: number }
+
+/** Things the view and the sound play out: the simulation only records them. */
+type Sfx = 'shot' | 'mg' | 'cannon' | 'boom' | 'horn' | 'alarm' | 'chime' | 'crunch';
 
 interface Tracer { x1: number; z1: number; y1: number; x2: number; z2: number; t: number; color: number }
 interface Boom { x: number; z: number; t: number; size: number }
@@ -94,13 +104,19 @@ interface Game {
   speed: number;               // 0 = paused
   funds: number;
   hq: number;                  // staging cell where bought units arrive
-  stats: { evacuated: number; dead: number; killed: number; unitsLost: number; spent: number; total: number };
+  stats: { evacuated: number; dead: number; killed: number; unitsLost: number; spent: number; total: number; missions: number; ferried: number };
   over: null | { why: 'time' | 'empty'; pct: number; grade: string };
   log: Array<{ t: number; text: string; kind: '' | 'good' | 'bad' | 'key' }>;
   nextId: number;
   sparks: number[];            // when new outbreaks start
   zedSpeed: number;            // grows as the night goes on
   changed: boolean;            // block colours need repainting
+  missions: Mission[];
+  nextMission: number;
+  waveAt: number;              // when the great horde arrives from the east (-1 once it has)
+  sfx: Array<{ k: Sfx; x: number; z: number }>;
+  shake: number;
+  alert: { text: string; until: number } | null;
 }
 
 let G: Game;

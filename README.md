@@ -14,6 +14,10 @@ A real-time take on the same outbreak, fought street by street across one city i
 - People shelter at home until you order a block to evacuate, or the infected come close and they panic. Evacuees walk to the nearest evacuation point with room and wait for a ship or bus. Each figure stands for 10 people.
 - The infected hunt the nearest people: anyone in the streets, crowds at the evacuation points, your troops, and blocks they can break into. The bitten lie still for a few seconds, then rise.
 - Buy bus evacuation points, militia (raised from a block's residents), infantry squads, APCs, tanks, air strikes and a gunship. Troops fire at anything in range on their own; you choose where they stand.
+- APCs carry people: park one beside a block to take up to 60 aboard, then drive them to an evacuation point.
+- Missions pop up on the map: supply drops worth money, and survivors on rooftops who need any unit to reach them before the infected do.
+- Runners sprint at crowds and fall fast; brutes soak up fire and smash doors in. At minute 8 a great horde pours in from the east.
+- Every sound is synthesised in the browser: gunfire, tank cannon, explosions, ship horns, sirens and the groans of the infected. M mutes.
 - The last ship sails after 12 minutes. You are scored on the share of the city saved: 60% is the top grade.
 
 ## How it plays

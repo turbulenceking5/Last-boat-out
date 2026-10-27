@@ -6,9 +6,12 @@ const STEP = 1 / 20;
 const BREACH = 25;        // zombie-seconds of battering before a block's doors give way
 const CONVERT_EVERY = 5;  // once inside, one figure's worth of people is caught this often
 const EMIT_EVERY = 2;     // an evacuating block lets one figure's worth of people out this often
+const WAVE_AT = 8 * 60;   // the great horde reaches the eastern edge
+const WAVE_SIZE = 220;
+const APC_CAP = 60;
 const fieldCache = new Map<number, Float32Array>();
 const doorField = new Float32Array(W * H);
-let panicSaid = 0, busSaid = 0; // routine messages are rationed so the log stays readable
+let panicSaid = 0, busSaid = 0, crowdSaid = 0; // routine messages are rationed so the log stays readable
 let zFieldT = 0, unitCount: Record<UnitKind, number> = { militia: 0, infantry: 0, apc: 0, tank: 0 };
 
 function newGame(seed: number) {
@@ -19,11 +22,12 @@ function newGame(seed: number) {
     blocks: [], zeds: [], civs: [], units: [], evacs: [], strikes: [], gunships: [], tracers: [], booms: [],
     zField: new Float32Array(W * H), eField: new Float32Array(W * H), eFieldDirty: true,
     t: 0, speed: 1, funds: 1500, hq: 0,
-    stats: { evacuated: 0, dead: 0, killed: 0, unitsLost: 0, spent: 0, total: 0 },
+    stats: { evacuated: 0, dead: 0, killed: 0, unitsLost: 0, spent: 0, total: 0, missions: 0, ferried: 0 },
     over: null, log: [], nextId: 1, sparks: [150, 320, 500], zedSpeed: 1, changed: true,
+    missions: [], nextMission: 55, waveAt: WAVE_AT, sfx: [], shake: 0, alert: null,
   };
   fieldCache.clear();
-  zFieldT = 0; panicSaid = 0; busSaid = 0;
+  zFieldT = 0; panicSaid = 0; busSaid = 0; crowdSaid = 0;
   unitCount = { militia: 0, infantry: 0, apc: 0, tank: 0 };
   generateCity(seeded(20261027)); // the same streets every game; the outbreak and its timing vary
   G.stats.total = G.blocks.reduce((a, b) => a + b.popMax, 0);
@@ -49,11 +53,16 @@ function outbreak(b: Block, n: number) {
 }
 
 const SHIRTS = [0x6a4f45, 0x5b6470, 0x7a6a50, 0x4d5a4a, 0x8a3a30, 0x6b6b6b, 0x3f4f66];
-/** A new infected. The bitten lie still for a while before they rise (rise = true). */
-function spawnZed(x: number, z: number, rise = true) {
-  if (G.zeds.length >= MAX_ZOMBIES) return;
-  const r = G.rnd;
-  G.zeds.push({ x, z, hp: 3, cd: 0.5 + r(), sp: 0.55 + r() * 0.45, ph: r() * 100, hd: r() * 6, shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], wx: x, wz: z, rise: rise ? 10 + r() * 8 : 0 });
+/** A new infected. The bitten lie still for a while before they rise (rise = true). Runners and brutes get commoner as the night goes on. */
+function spawnZed(x: number, z: number, rise = true, kind?: ZedKind): Zed | null {
+  if (G.zeds.length >= MAX_ZOMBIES) return null;
+  const r = G.rnd, late = G.t / GAME_SECONDS;
+  if (kind === undefined) { const k = r(); kind = k < 0.02 + late * 0.03 ? ZedKind.Brute : k < 0.08 + late * 0.1 ? ZedKind.Runner : ZedKind.Walker; }
+  const hp = kind === ZedKind.Brute ? 16 : kind === ZedKind.Runner ? 1.5 : 3;
+  const sp = kind === ZedKind.Brute ? 0.45 + r() * 0.15 : kind === ZedKind.Runner ? 1.6 + r() * 0.4 : 0.55 + r() * 0.45;
+  const zd: Zed = { x, z, hp, cd: 0.5 + r(), sp, ph: r() * 100, hd: r() * 6, shirt: kind === ZedKind.Runner ? 0x9a3328 : SHIRTS[Math.floor(r() * SHIRTS.length)], wx: x, wz: z, rise: rise ? 10 + r() * 8 : 0, kind, march: false };
+  G.zeds.push(zd);
+  return zd;
 }
 
 const CIV_COLORS = [0xe9e3cf, 0x7f93a6, 0xb8865b, 0xc9b99a, 0x9a6b8a, 0x6f8f6a, 0xd2a65a];
@@ -71,7 +80,7 @@ function spawnUnit(kind: UnitKind, from: number, goal: number, name?: string): U
   unitCount[kind]++;
   const u: Unit = {
     id: G.nextId++, kind, name: name ?? `${s.name} ${unitCount[kind]}`, x: ci(from) + 0.5, z: cj(from) + 0.5, hd: 0,
-    members, goal: -1, field: null, aim: null, kills: 0, people: kind === 'militia' ? s.members * PER_AGENT : 0,
+    members, goal: -1, field: null, aim: null, kills: 0, people: kind === 'militia' ? s.members * PER_AGENT : 0, cargo: 0, loadT: 0,
   };
   G.units.push(u);
   if (goal >= 0) sendUnit(u, goal);
@@ -164,6 +173,9 @@ function tick(dt: number) {
   cHash.build(G.civs);
 
   while (G.sparks.length && G.t >= G.sparks[0]) { G.sparks.shift(); spark(); }
+  updateWave();
+  updateMissions(dt);
+  G.shake = Math.max(0, G.shake - dt * 2);
   for (const b of G.blocks) updateBlock(b, dt);
   for (const c of G.civs) if (!c.gone) updateCiv(c, dt);
   for (const u of G.units) updateUnit(u, dt);
@@ -182,13 +194,18 @@ function tick(dt: number) {
     const before = u.members.length;
     u.members = u.members.filter(m => m.hp > 0);
     if (u.people > 0) { const lost = Math.min(u.people, (before - u.members.length) * PER_AGENT); u.people -= lost; G.stats.dead += lost; }
-    if (before && !u.members.length) { G.stats.unitsLost++; say(`${u.name} has been wiped out.`, 'bad'); }
+    if (before && !u.members.length) {
+      G.stats.unitsLost++; say(`${u.name} has been wiped out.`, 'bad');
+      if (u.cargo) { G.stats.dead += u.cargo; say(`${u.cargo} civilians aboard ${u.name} were lost with it.`, 'bad'); u.cargo = 0; }
+      if (UNITS[u.kind].vehicle) G.sfx.push({ k: 'boom', x: u.x, z: u.z });
+    }
   }
   G.units = G.units.filter(u => u.members.length);
   for (const t of G.tracers) t.t -= dt;
   G.tracers = G.tracers.filter(t => t.t > 0);
   for (const b of G.booms) b.t -= dt;
   G.booms = G.booms.filter(b => b.t > 0);
+  if (G.sfx.length > 300) G.sfx.splice(0, G.sfx.length - 300); // nobody is listening (tests)
 
   if (G.t >= GAME_SECONDS) finish('time');
   else if (G.t > 5 && G.blocks.every(b => b.pop <= 0) && !G.civs.length && G.evacs.every(e => e.queue <= 0)) finish('empty');
@@ -205,6 +222,7 @@ function rebuildZField() {
   for (const c of G.civs) if (!c.gone) src.push(cellOf(c.x, c.z));
   for (const u of G.units) for (const m of u.members) src.push(cellOf(m.x, m.z));
   for (const e of G.evacs) if (e.queue > 0) src.push(e.cell);
+  for (const m of G.missions) if (m.kind === 'survivors') src.push(cellOf(m.x, m.z));
   for (const b of G.blocks) if (b.pop > 0) for (const d of b.doors) doors.push(d);
   distanceField(G.zField, src);
   distanceField(doorField, doors);
@@ -271,11 +289,19 @@ function updateZed(z: Zed, dt: number) {
     if (v) {
       v.gone = true; G.stats.dead += PER_AGENT; spawnZed(v.x, v.z); z.cd = 0.9; return;
     }
+    for (const ms of G.missions) {
+      if (ms.kind !== 'survivors' || ms.people <= 0 || dist2(ms.x, ms.z, z.x, z.z) > 1.4) continue;
+      z.cd = 0.9;
+      if (G.t < ms.biteT) return;
+      ms.biteT = G.t + 1; ms.people -= PER_AGENT; G.stats.dead += PER_AGENT; spawnZed(z.x, z.z);
+      return;
+    }
     for (const u of G.units) {
       if (dist2(u.x, u.z, z.x, z.z) > 9) continue;
       const m = u.members.find(m => m.hp > 0 && dist2(m.x, m.z, z.x, z.z) < (UNITS[u.kind].vehicle ? 1.1 : 0.6));
       if (m) {
-        m.hp -= 1; z.cd = 1.0;
+        m.hp -= z.kind === ZedKind.Brute ? (UNITS[u.kind].vehicle ? 5 : 2) : 1; z.cd = 1.0;
+        if (z.kind === ZedKind.Brute && UNITS[u.kind].vehicle) G.sfx.push({ k: 'crunch', x: z.x, z: z.z });
         if (m.hp <= 0 && !UNITS[u.kind].vehicle && G.rnd() < 0.5) spawnZed(m.x, m.z); // the fallen get back up
         return;
       }
@@ -285,7 +311,7 @@ function updateZed(z: Zed, dt: number) {
       const blk = G.blocks[b];
       blk.evacuating = true;
       // the doors hold for a while; once they give, people inside are caught a few at a time
-      if (blk.breach < BREACH) { blk.breach += 1; z.cd = 1; return; }
+      if (blk.breach < BREACH) { blk.breach += z.kind === ZedKind.Brute ? 6 : 1; z.cd = 1; if (z.kind === ZedKind.Brute) G.sfx.push({ k: 'crunch', x: z.x, z: z.z }); return; }
       z.cd = 1;
       if (G.t < blk.convertT) return;
       blk.convertT = G.t + CONVERT_EVERY;
@@ -300,14 +326,15 @@ function updateZed(z: Zed, dt: number) {
         if (G.t < e.biteT) return;
         e.biteT = G.t + 0.8;
         e.queue -= PER_AGENT; G.stats.dead += PER_AGENT; spawnZed(z.x, z.z);
-        if (G.rnd() < 0.08) say(`The infected are among the crowd at ${e.kind === 'harbor' ? 'the harbour' : 'a bus stop'}.`, 'bad');
+        if (G.t > crowdSaid) { crowdSaid = G.t + 20; say(`The infected are among the crowd at ${e.kind === 'harbor' ? 'the harbour' : 'a bus stop'}.`, 'bad'); }
         return;
       }
     }
   }
   if (z.cd > 0.5) return; // still busy with the last bite
   const f = G.zField[cellOf(z.x, z.z)], sp = z.sp * G.zedSpeed * dt;
-  if (f < AGGRO) {
+  if (f < AGGRO + (z.kind === ZedKind.Runner ? 8 : 0)) {
+    z.march = false;
     const next = downhill(G.zField, z.x, z.z);
     if (next) {
       const j = Math.sin(z.ph + G.t * 0.7) * 0.35;
@@ -318,6 +345,11 @@ function updateZed(z: Zed, dt: number) {
       if (v) stepToward(z, v.x, v.z, sp);
       else for (const u of G.units) if (dist2(u.x, u.z, z.x, z.z) < 4) { stepToward(z, u.x, u.z, sp); break; }
     }
+  } else if (z.march) {
+    // the great horde pours along the streets toward the heart of the city
+    const next = downhill(fieldTo(CITY_HEART), z.x, z.z);
+    if (next) stepToward(z, next[0] + Math.sin(z.ph) * 0.4, next[1] + Math.cos(z.ph) * 0.4, sp * 0.9);
+    else z.march = false;
   } else {
     // nothing in reach: shamble about
     if (dist2(z.x, z.z, z.wx, z.wz) < 0.3 || G.rnd() < dt * 0.1) {
@@ -343,6 +375,7 @@ function updateUnit(u: Unit, dt: number) {
       else { u.goal = -1; u.field = null; }
     }
   }
+  if (u.kind === 'apc' && u.goal < 0) apcCargo(u, dt);
   for (const m of u.members) {
     const tx = u.x + m.ox, tz = u.z + m.oz;
     const gx = walkableAt(tx, tz) ? tx : u.x, gz = walkableAt(tx, tz) ? tz : u.z;
@@ -356,6 +389,7 @@ function updateUnit(u: Unit, dt: number) {
     if (s.vehicle) { u.aim = { x: target.x, z: target.z }; if (u.goal < 0) u.hd = m.hd; }
     const hit = G.rnd() < s.acc;
     const tx2 = hit ? target.x : target.x + (G.rnd() - 0.5) * 1.5, tz2 = hit ? target.z : target.z + (G.rnd() - 0.5) * 1.5;
+    G.sfx.push({ k: u.kind === 'tank' ? 'cannon' : u.kind === 'apc' ? 'mg' : 'shot', x: m.x, z: m.z });
     G.tracers.push({ x1: m.x, z1: m.z, y1: s.vehicle ? 0.9 : 0.55, x2: tx2, z2: tz2, t: u.kind === 'tank' ? 0.25 : 0.08, color: u.kind === 'militia' ? 0xffd27a : 0xfff0b0 });
     if (s.splash) {
       G.booms.push({ x: tx2, z: tz2, t: 0.5, size: 1.2 });
@@ -370,6 +404,7 @@ function updateStrike(s: Strike, dt: number) {
   for (let k = 0; k < s.bombs; k++) {
     const o = (k - (s.bombs - 1) / 2) * 1.7, x = s.x + Math.cos(s.dir) * o, z = s.z + Math.sin(s.dir) * o;
     G.booms.push({ x, z, t: 0.9 + k * 0.05, size: 2.6 });
+    G.sfx.push({ k: 'boom', x, z });
     zHash.near(x, z, 2.4, zd => { hitZed(zd, 99, null); });
     cHash.near(x, z, 2.4, c => { if (!c.gone) { c.gone = true; G.stats.dead += PER_AGENT; } });
     for (const u of G.units) for (const m of u.members) if (dist2(m.x, m.z, x, z) < 2.4 * 2.4) m.hp -= UNITS[u.kind].vehicle ? 20 : 4;
@@ -381,6 +416,7 @@ function updateStrike(s: Strike, dt: number) {
     if (lost > 0) { b.pop -= lost; G.stats.dead += lost; say(`The air strike killed ${lost} people in ${b.name}.`, 'bad'); }
   }
   s.bombs = 0;
+  G.shake = 1;
 }
 
 function updateGunship(g: Gunship, dt: number) {
@@ -393,6 +429,7 @@ function updateGunship(g: Gunship, dt: number) {
   if (!target) { g.cd = 0.3; return; }
   g.cd = 0.1;
   const hit = G.rnd() < 0.8;
+  G.sfx.push({ k: 'mg', x: g.hx, z: g.hz });
   G.tracers.push({ x1: g.hx, z1: g.hz, y1: 6, x2: target.x, z2: target.z, t: 0.07, color: 0xffe08a });
   if (hit) hitZed(target, 2, null);
 }
@@ -405,7 +442,7 @@ function updateEvac(e: Evac, dt: number) {
   if (take <= 0) return;
   e.queue -= take; e.departed++;
   G.stats.evacuated += take; G.funds += take * 0.6;
-  if (e.kind === 'harbor') say(`A ship sails from the harbour with ${take} people aboard.`, 'good');
+  if (e.kind === 'harbor') { say(`A ship sails from the harbour with ${take} people aboard.`, 'good'); G.sfx.push({ k: 'horn', x: e.x, z: e.z }); }
   else if (G.t > busSaid) { busSaid = G.t + 30; say(`Buses are running: ${take} more people on their way out.`, 'good'); }
 }
 
@@ -414,8 +451,126 @@ function finish(why: 'time' | 'empty') {
   // the last ship and the last buses take one more load each; militia leave with them
   for (const e of G.evacs) { const take = Math.min(e.queue, e.cap); G.stats.evacuated += take; e.queue -= take; }
   for (const u of G.units) if (u.people > 0) G.stats.evacuated += u.people;
+  for (const m of G.missions) if (m.kind === 'survivors') G.stats.dead += m.people; // nobody reached them
+  G.missions = [];
   const pct = (G.stats.evacuated / G.stats.total) * 100;
   const grade = pct >= 60 ? 'Saviour of the city' : pct >= 45 ? 'An orderly withdrawal' : pct >= 30 ? 'A bitter retreat' : 'Catastrophe';
   G.over = { why, pct, grade };
   say(why === 'time' ? 'The last ship has sailed.' : 'There is nobody left in the city to save.', 'key');
+}
+
+// ---- APC rescues ----
+
+/** A parked APC beside a populated block takes people aboard; beside an evacuation point it lets them off. */
+function apcCargo(u: Unit, dt: number) {
+  u.loadT -= dt;
+  if (u.loadT > 0) return;
+  u.loadT = 0.5;
+  if (u.cargo > 0) {
+    for (const e of G.evacs) if (dist2(e.x, e.z, u.x, u.z) < 12) {
+      e.queue += u.cargo; G.stats.ferried += u.cargo;
+      say(`${u.name} drops ${u.cargo} people at ${e.kind === 'harbor' ? 'the harbour' : 'the evacuation point'}.`, 'good');
+      G.sfx.push({ k: 'chime', x: u.x, z: u.z });
+      u.cargo = 0;
+      return;
+    }
+  }
+  if (u.cargo >= APC_CAP) return;
+  const i0 = Math.floor(u.x), j0 = Math.floor(u.z);
+  for (let j = j0 - 2; j <= j0 + 2; j++) for (let i = i0 - 2; i <= i0 + 2; i++) {
+    if (!inside(i, j)) continue;
+    const b = G.doorOf[idx(i, j)];
+    if (b < 0 || G.blocks[b].pop <= 0) continue;
+    const blk = G.blocks[b], take = Math.min(PER_AGENT, blk.pop, APC_CAP - u.cargo);
+    blk.pop -= take; u.cargo += take;
+    if (u.cargo >= APC_CAP) say(`${u.name} is full: ${u.cargo} people aboard. Drive them to an evacuation point.`, 'key');
+    return;
+  }
+}
+
+/** Send APCs to the door of a block nearest to them, to load people. */
+function sendToBlock(units: Unit[], b: Block) {
+  for (const u of units) {
+    let best = -1, bd = INF;
+    for (const d of b.doors) { const dd = dist2(ci(d) + 0.5, cj(d) + 0.5, u.x, u.z); if (dd < bd) { bd = dd; best = d; } }
+    if (best >= 0) sendUnit(u, best);
+  }
+}
+
+// ---- missions ----
+
+function updateMissions(dt: number) {
+  G.nextMission -= dt;
+  if (G.nextMission <= 0 && G.missions.length < 2 && G.t < GAME_SECONDS - 75) {
+    G.nextMission = 55 + G.rnd() * 25;
+    spawnMission();
+  }
+  for (const m of G.missions) {
+    m.t -= dt;
+    const u = G.units.find(u => u.members.some(mb => dist2(mb.x, mb.z, m.x, m.z) < 2.6));
+    if (u && (m.kind === 'crate' || m.people > 0)) {
+      if (m.kind === 'crate') {
+        G.funds += m.reward;
+        say(`${u.name} recovers the supply drop: $${m.reward}.`, 'good');
+      } else {
+        let walk = m.people;
+        if (u.kind === 'apc') { const take = Math.min(walk, APC_CAP - u.cargo); u.cargo += take; walk -= take; }
+        for (let k = 0; k < walk / PER_AGENT; k++) spawnCiv(m.x + (G.rnd() - 0.5) * 1.2, m.z + (G.rnd() - 0.5) * 1.2);
+        G.funds += m.reward;
+        say(`${u.name} reaches the survivors: ${m.people} people${walk < m.people ? ' climb aboard' : ' head for the evacuation points'}. $${m.reward}.`, 'good');
+        m.people = 0;
+      }
+      G.sfx.push({ k: 'chime', x: m.x, z: m.z });
+      G.stats.missions++;
+      m.t = -1; m.kind = 'crate'; // done
+      continue;
+    }
+    if (m.kind === 'survivors' && m.people <= 0 && m.t > 0) { say('The survivors were overrun before help arrived.', 'bad'); m.t = -1; m.kind = 'crate'; }
+  }
+  for (const m of G.missions) if (m.t <= 0 && m.t > -1) {
+    if (m.kind === 'survivors') { G.stats.dead += m.people; say(`No one reached the survivors in time. ${m.people} people are lost.`, 'bad'); }
+    else say('The supply drop was lost to looters.');
+  }
+  G.missions = G.missions.filter(m => m.t > 0);
+}
+
+function spawnMission() {
+  // somewhere on the streets, away from the fort and the evacuation points
+  for (let tries = 0; tries < 60; tries++) {
+    const i = 3 + Math.floor(G.rnd() * (W - 6)), j = 3 + Math.floor(G.rnd() * (QUAY_Z - 6)), c = idx(i, j);
+    if (G.grid[c] !== Cell.Road) continue;
+    const x = i + 0.5, z = j + 0.5;
+    if (dist2(x, z, ci(G.hq), cj(G.hq)) < 200 || G.evacs.some(e => dist2(e.x, e.z, x, z) < 64)) continue;
+    const survivors = G.rnd() < 0.55;
+    const near = G.blocks.reduce((a, b) => dist2(b.x0 + 3, b.z0 + 3, x, z) < dist2(a.x0 + 3, a.z0 + 3, x, z) ? b : a);
+    const m: Mission = { id: G.nextId++, kind: survivors ? 'survivors' : 'crate', x, z, t: survivors ? 75 : 60, people: survivors ? 60 + Math.floor(G.rnd() * 4) * 10 : 0, reward: survivors ? 400 : 700, biteT: 0 };
+    if (survivors) G.stats.total += m.people; // people nobody knew were there
+    G.missions.push(m);
+    say(survivors ? `Survivors are signalling from a rooftop near ${near.name}: ${m.people} people. Get any unit to them in 75 seconds.` : `A supply drop has come down near ${near.name}. Get any unit to it in 60 seconds for $${m.reward}.`, 'key');
+    G.sfx.push({ k: 'chime', x, z });
+    return;
+  }
+}
+
+// ---- the great horde ----
+
+const CITY_HEART = idx(37, 30);
+function updateWave() {
+  if (G.waveAt < 0) return;
+  if (G.t >= G.waveAt - 30 && !G.alert) {
+    G.alert = { text: 'A great horde is coming in from the east. 30 seconds.', until: G.t + 8 };
+    say('Aircraft report a great horde crossing the river to the east. It will reach the city in 30 seconds.', 'bad');
+    G.sfx.push({ k: 'alarm', x: 70, z: 30 });
+  }
+  if (G.t < G.waveAt) return;
+  G.waveAt = -1;
+  const roads: number[] = [];
+  for (let j = 0; j < QUAY_Z; j++) for (const i of [W - 2, W - 1]) if (walkable(idx(i, j))) roads.push(idx(i, j));
+  for (let k = 0; k < WAVE_SIZE; k++) {
+    const c = roads[Math.floor(G.rnd() * roads.length)], r = G.rnd();
+    const zd = spawnZed(ci(c) + G.rnd(), cj(c) + G.rnd(), false, r < 0.06 ? ZedKind.Brute : r < 0.3 ? ZedKind.Runner : ZedKind.Walker);
+    if (zd) zd.march = true;
+  }
+  G.alert = { text: 'The horde is in the city.', until: G.t + 5 };
+  say(`The great horde is in the city: about ${WAVE_SIZE * PER_AGENT} infected pouring in from the east.`, 'bad');
 }

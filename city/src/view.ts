@@ -158,9 +158,12 @@ function drawPeople(time: number) {
   for (const z of G.zeds) {
     if (n >= MAX_ZOMBIES) break;
     // the newly bitten lie on the ground until they rise; then a shambling lean and bob
-    const down = z.rise > 0, bob = down ? 0.12 : Math.abs(Math.sin(time * 4 + z.ph)) * 0.05, lean = down ? Math.PI / 2 : 0.25 + Math.sin(z.ph) * 0.1;
-    setInst(zBody, n, z.x, bob, z.z, PS, PS, PS, z.hd, lean, z.shirt);
-    setInst(zHead, n, z.x, bob, z.z, PS, PS, PS, z.hd, lean);
+    // brutes are hulking; runners lean hard into a sprint
+    const down = z.rise > 0, runner = z.kind === ZedKind.Runner, s = z.kind === ZedKind.Brute ? PS * 1.6 : PS;
+    const bob = down ? 0.12 : Math.abs(Math.sin(time * (runner ? 11 : 4) + z.ph)) * (runner ? 0.09 : 0.05);
+    const lean = down ? Math.PI / 2 : runner ? 0.6 : 0.25 + Math.sin(z.ph) * 0.1;
+    setInst(zBody, n, z.x, bob, z.z, s * (z.kind === ZedKind.Brute ? 1.25 : 1), s, s, z.hd, lean, z.kind === ZedKind.Brute ? 0x4a3a33 : z.shirt);
+    setInst(zHead, n, z.x, bob, z.z, s, s, s, z.hd, lean);
     n++;
   }
   zBody.count = zHead.count = n;
@@ -171,6 +174,15 @@ function drawPeople(time: number) {
     setInst(cBody, n, c.x, bob, c.z, PS, PS, PS, c.hd, 0.12, c.color);
     setInst(cHead, n, c.x, bob, c.z, PS, PS, PS, c.hd, 0.12);
     n++;
+  }
+  // survivors waiting on a rooftop mission, huddled round their flare
+  for (const m of G.missions) {
+    if (m.kind !== 'survivors') continue;
+    for (let q = 0; q < m.people / PER_AGENT && n < MAX_CIVS; q++, n++) {
+      const a = q * 2.4, r = 0.6 + Math.floor(Math.sqrt(q)) * 0.35, wave = Math.sin(time * 6 + q) * 0.15;
+      setInst(cBody, n, m.x + Math.cos(a) * r, Math.max(0, wave) * 0.3, m.z + Math.sin(a) * r, PS, PS, PS, a + Math.PI, 0, CIV_COLORS[q % CIV_COLORS.length]);
+      setInst(cHead, n, m.x + Math.cos(a) * r, Math.max(0, wave) * 0.3, m.z + Math.sin(a) * r, PS, PS, PS, a + Math.PI);
+    }
   }
   // the crowds waiting at evacuation points, packed in rings round the marker
   for (const e of G.evacs) {
@@ -275,6 +287,39 @@ function makeJet(): TGroup {
   part(g, 0x5d666a, 2.6, 0.08, 0.9, 0, 0.1, -0.3);
   part(g, 0x5d666a, 0.08, 0.6, 0.5, 0, 0.3, -1.3);
   V.scene.add(g); return g;
+}
+
+function makeBeacon(kind: Mission['kind']): TGroup {
+  const g = new THREE.Group();
+  const color = kind === 'crate' ? 0xe2a23a : 0xff6a3a;
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.6, 22, 12, 1, true).translate(0, 11, 0), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  beam.name = 'beam'; g.add(beam);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.07, 4, 28).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color }));
+  ring.name = 'ring'; ring.position.y = 0.06; g.add(ring);
+  if (kind === 'crate') {
+    part(g, 0x8a6b44, 0.9, 0.7, 0.9);
+    part(g, 0x55633a, 0.95, 0.12, 0.95, 0, 0.35);
+  } else {
+    const flare = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb08a }));
+    flare.name = 'flare'; flare.position.y = 1.8; g.add(flare);
+  }
+  V.scene.add(g);
+  return g;
+}
+const beacons = new Map<number, TGroup>();
+function drawBeacons(time: number) {
+  const live = new Set<number>();
+  for (const m of G.missions) {
+    live.add(m.id);
+    let g = beacons.get(m.id);
+    if (!g) { g = makeBeacon(m.kind); beacons.set(m.id, g); g.position.set(m.x, 0, m.z); }
+    const urgent = m.t < 15, pulse = 1 + Math.sin(time * (urgent ? 10 : 4)) * 0.15;
+    const ring = g.getObjectByName('ring'); if (ring) ring.scale.setScalar(pulse);
+    const beam = g.getObjectByName('beam') as TMesh | undefined;
+    if (beam) (beam.material as THREE.MeshBasicMaterial).opacity = 0.16 + Math.max(0, Math.sin(time * 3)) * 0.12;
+    const flare = g.getObjectByName('flare'); if (flare) flare.position.y = 1.8 + Math.sin(time * 2) * 0.3;
+  }
+  for (const [id, g] of beacons) if (!live.has(id)) { V.scene.remove(g); beacons.delete(id); }
 }
 
 const vehicles = new Map<number, TGroup>();
@@ -424,6 +469,7 @@ function placeCamera() {
   const c = V.cam, h = Math.sin(c.pitch) * c.dist, back = Math.cos(c.pitch) * c.dist;
   V.camera.position.set(c.x - Math.sin(c.yaw) * back, h, c.z + Math.cos(c.yaw) * back);
   V.camera.lookAt(c.x, 0, c.z);
+  if (G.shake > 0) { const k = G.shake * G.shake * 0.5; V.camera.position.x += (Math.random() - 0.5) * k; V.camera.position.y += (Math.random() - 0.5) * k; }
   // keep the shadow map centred on what you are looking at
   V.sun.position.set(c.x + 18, 34, c.z + 10); V.sun.target.position.set(c.x, 0, c.z); V.sun.target.updateMatrixWorld();
   const s = Math.max(30, c.dist * 0.9);
@@ -478,6 +524,7 @@ function drawFrame(time: number, dt: number, sel: Unit[], selBlock: Block | null
   if (G.changed) { paintBlocks(); G.changed = false; }
   drawPeople(time);
   drawVehicles(time);
+  drawBeacons(time);
   drawTracers();
   drawBooms(dt);
   drawSmoke(time);
