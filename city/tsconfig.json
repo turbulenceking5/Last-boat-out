@@ -1,0 +1,14 @@
+{
+  // Plain global scripts (no import/export), type-checked against @types/three and compiled to build/;
+  // build.js joins them, in this order, into city.js.
+  "compilerOptions": {
+    "target": "ES2019",
+    "lib": ["ES2019", "DOM"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "rootDir": "src",
+    "outDir": "build",
+    "types": []
+  },
+  "files": ["src/env.d.ts", "src/core.ts", "src/citygen.ts", "src/sim.ts", "src/view.ts", "src/ui.ts", "src/main.ts"]
+}

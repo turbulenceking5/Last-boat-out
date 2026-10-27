@@ -1347,7 +1347,8 @@ function renderOverlay(){
       <h3>Difficulty</h3><div class="seg">${Object.entries(DIFFS).map(([key,d])=>`<button class="btn" data-act="setopt" data-k="diff" data-v="${key}" aria-pressed="${st.diff===key}">${d.name}<small>${d.desc}</small></button>`).join('')}</div>
       <h3>Seed</h3><div class="field"><input id="seedinput" inputmode="numeric" placeholder="Random" value="${st.seed??''}" aria-label="Campaign seed"><span class="note">Enter a seed to replay or share a campaign.</span></div>
       ${setupRecord(st)}
-      <div class="choices"><button class="btn primary" data-act="start" id="startbtn">Take command</button>${S&&!S.over&&UI.setup.canCancel?'<button class="btn" data-act="cancelsetup">Back to the current campaign</button>':''}</div></div>`;
+      <div class="choices"><button class="btn primary" data-act="start" id="startbtn">Take command</button>${S&&!S.over&&UI.setup.canCancel?'<button class="btn" data-act="cancelsetup">Back to the current campaign</button>':''}</div>
+      <p class="note">New prototype: <a href="city/">Last Boat to Calder: City</a>, a real-time battle for one city, in 3D.</p></div>`;
   } else if(UI.help){
     html=`<div class="card" role="dialog" aria-modal="true" aria-labelledby="hh"><span class="eyebrow">Field manual</span><h2 id="hh">How to play</h2>${HELP}<div class="choices"><button class="btn primary" data-act="closehelp">Back to the map</button></div></div>`;
   } else if(S.over){

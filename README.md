@@ -4,6 +4,18 @@ A turn-based zombie outbreak command game. You are the general in charge of Vess
 
 **Play it:** https://turbulenceking5.github.io/Last-boat-out/
 
+## Last Boat to Calder: City (prototype)
+
+**Play it:** https://turbulenceking5.github.io/Last-boat-out/city/
+
+A real-time take on the same outbreak, fought street by street across one city in 3D. Pause at any time; play at 1×, 2× or 4× speed.
+
+- The city has downtown towers, apartment blocks, suburbs, an industrial east side, two parks, Fort Aldermoor in the north-west and the harbour along the south shore. The outbreak starts at St Brennan's Hospital, with new ones later.
+- People shelter at home until you order a block to evacuate, or the infected come close and they panic. Evacuees walk to the nearest evacuation point with room and wait for a ship or bus. Each figure stands for 10 people.
+- The infected hunt the nearest people: anyone in the streets, crowds at the evacuation points, your troops, and blocks they can break into. The bitten lie still for a few seconds, then rise.
+- Buy bus evacuation points, militia (raised from a block's residents), infantry squads, APCs, tanks, air strikes and a gunship. Troops fire at anything in range on their own; you choose where they stand.
+- The last ship sails after 12 minutes. You are scored on the share of the city saved: 60% is the top grade.
+
 ## How it plays
 
 - The map has 21 places linked by roads and railways: the capital Aldermoor (your headquarters), towns, army bases, supply depots and three evacuation ports.
@@ -27,6 +39,8 @@ Press `?` in the game for the field manual. Keys: `E` ends the turn, `U` undoes 
 | File | What it is |
 |---|---|
 | `index.html` | The whole game: markup, styles and script in one file, no build step. Progress and your record of past campaigns are saved in the browser's local storage. |
+| `city/index.html`, `city/src/*.ts` | The City prototype. `core.ts` (types, grid, pathfinding fields, spatial hash), `citygen.ts` (the city), `sim.ts` (the simulation), `view.ts` (the Three.js view), `ui.ts` (HUD and input), `main.ts` (the loop). Compiled into `city/city.js`, which is committed. |
+| `tests/city.js`, `tests/city-fuzz.js` | City balance (seeded games per scripted strategy) and random input testing at desktop and phone sizes. |
 | `models/src/*.ts` | The 3D place models, written in TypeScript against [Three.js](https://threejs.org/) r149: `kit.ts` (palette and building blocks), `places.ts` (one model per kind of place), `life.ts` (troops, infected, civilians, smoke and fire), `viewer.ts` (the shared renderer the game talks to). |
 | `models/models.js` | The compiled models, committed so the game still needs no build step. `index.html` loads it and Three.js (from the jsDelivr CDN) with plain script tags; if either can't load, or the browser has no WebGL, the game runs without the 3D view. |
 | `tests/strats.js` | A library of scripted strategies (do nothing, evacuate everything, a heuristic bot, and known exploit openings) that play the game through its own functions. |
@@ -34,16 +48,19 @@ Press `?` in the game for the field manual. Keys: `E` ends the turn, `U` undoes 
 | `tests/peek.js` | Plays one seeded campaign with a strategy and prints any expression after every turn, for example `node tests/peek.js index.html bEP 3 "S.sorties"`. |
 | `tests/ui.js` | Clicks and presses keys at random for thousands of steps at desktop and phone sizes, reports any script errors, and saves screenshots to `tests/out/`. |
 
-## Changing the 3D models
+## Changing the 3D models or the City
 
-Edit the TypeScript in `models/src/`, then rebuild `models/models.js`:
+Edit the TypeScript in `models/src/` or `city/src/`, then rebuild:
 
 ```sh
 npm install
-npm run build:models   # type-checks with tsc, then joins the output into models/models.js
+npm run build:models   # models/src -> models/models.js
+npm run build:city     # city/src -> city/city.js
+npm run city           # City balance: 4 seeded games per strategy
+node tests/city-fuzz.js  # City random input test
 ```
 
-Commit the rebuilt `models/models.js` along with the TypeScript.
+Commit the rebuilt `.js` files along with the TypeScript.
 
 ## Running the tests
 

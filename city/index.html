@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Last Boat to Calder: City. A real-time prototype: hold a city against the outbreak, set up evacuation points, buy troops, vehicles and air support, and get people to the last ship.">
+<meta name="theme-color" content="#13171a">
+<title>Last Boat to Calder: City</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<script defer src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js" integrity="sha384-RRHfJ6w1mTlKUBMYT/hvnRiOzEB/vyRV3DrQOseb6oYfvaZSfdd0byS4bHps0k2R" crossorigin="anonymous"></script>
+<script defer src="city.js"></script>
+<style>
+:root{
+  color-scheme:dark;
+  --bg:#13171a;--panel:rgba(28,35,38,.92);--panel-2:#252e32;--line:rgba(226,220,200,.14);
+  --ink:#e4dfcf;--muted:#a3aa9f;--amber:#e2a23a;--blood:#c4432f;--good:#8fb27a;
+  --font-display:'Special Elite','Courier New',monospace;
+  --font-ui:'Barlow Semi Condensed','Arial Narrow',system-ui,sans-serif;
+  --font-num:'IBM Plex Mono',ui-monospace,Menlo,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font:15px/1.4 var(--font-ui)}
+button,a{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+[hidden]{display:none!important}
+#view{position:fixed;inset:0}
+#view canvas{display:block;touch-action:none}
+
+#hud{position:fixed;left:10px;right:10px;top:calc(8px + env(safe-area-inset-top,0px));display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding:8px 12px;background:var(--panel);border:1px solid var(--line);border-radius:6px;pointer-events:auto;z-index:5}
+.brand{font:20px/1 var(--font-display);white-space:nowrap}
+.brand small{display:block;font:600 10.5px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:3px}
+.stat{display:flex;flex-direction:column;min-width:0}
+.stat span{font:600 10.5px var(--font-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.stat b{font:600 16px var(--font-num);white-space:nowrap}
+.good{color:var(--good)}.bad{color:#ec9a8b}.warn{color:var(--amber)}
+.spacer{flex:1}
+#speed{display:flex;gap:4px}
+.sb,.btn{background:var(--panel-2);border:1px solid rgba(226,220,200,.22);border-radius:4px;padding:6px 10px;font-weight:600;min-height:34px;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}
+.sb.on{border-color:var(--amber);color:var(--amber)}
+.btn:hover:not(:disabled),.sb:hover{border-color:var(--amber)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.primary{background:var(--amber);color:#1b1608;border-color:var(--amber)}
+
+#side{position:fixed;right:10px;top:96px;bottom:88px;width:310px;display:flex;flex-direction:column;gap:8px;z-index:4;pointer-events:none}
+#side > *{pointer-events:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+#sel{display:flex;flex-direction:column;gap:6px}
+#sel .row{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+#sel .big{font:20px/1.15 var(--font-display)}
+#sel p{margin:0}
+.note{font-size:13px;color:var(--muted);margin:0}
+.btns{display:flex;gap:6px;flex-wrap:wrap}
+.tag{font:600 11px var(--font-ui);letter-spacing:.1em;text-transform:uppercase;padding:2px 7px;border-radius:2px;background:#d9d2b8;color:#15130c}
+.tag.warn{background:var(--amber)}.tag.bad{background:var(--blood);color:#fff}
+.hp{display:block;height:6px;background:rgba(0,0,0,.45);border-radius:2px;overflow:hidden}
+.hp i{display:block;height:100%;background:var(--good)}
+.hp.low i{background:var(--blood)}
+.unit{display:flex;flex-direction:column;gap:3px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+#logbox{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column}
+#logbox h2{margin:0 0 6px;font:600 11px var(--font-ui);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+#log{list-style:none;margin:0;padding:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+#log li{font:13px/1.4 var(--font-display);color:#d3cdbb}
+#log li time{font:600 11px var(--font-num);color:var(--muted);margin-right:6px}
+#log li.bad{color:#eaa092}#log li.good{color:#b8d4a3}#log li.key{color:var(--amber)}
+
+#bar{position:fixed;left:10px;right:330px;bottom:calc(10px + env(safe-area-inset-bottom,0px));display:flex;gap:6px;overflow-x:auto;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:6px;z-index:5;scrollbar-width:thin}
+.bb{flex:1 0 108px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;background:var(--panel-2);border:1px solid rgba(226,220,200,.22);border-radius:4px;padding:7px 10px;text-align:left;min-height:52px}
+.bb b{font-weight:700}
+.bb small{font:500 12px var(--font-num);color:var(--muted);display:flex;gap:8px;align-items:center;width:100%}
+.bb kbd{margin-left:auto;font:600 10px var(--font-num);border:1px solid var(--line);border-radius:3px;padding:0 4px}
+.bb.on{border-color:var(--amber);background:#3a2f17}
+.bb.poor small{color:#ec9a8b}
+.bb:hover{border-color:var(--amber)}
+#hint{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + env(safe-area-inset-bottom,0px));background:#3a2f17;border:1px solid var(--amber);border-radius:4px;padding:7px 10px;z-index:6;max-width:calc(100% - 20px);display:flex;gap:10px;align-items:center}
+#hint button{background:none;border:1px solid var(--amber);border-radius:3px;padding:2px 8px}
+#toast{position:fixed;left:50%;transform:translateX(-50%);top:110px;background:#4a1f18;border:1px solid var(--blood);border-radius:4px;padding:8px 12px;z-index:7}
+
+#overlay{position:fixed;inset:0;background:rgba(6,8,10,.72);display:flex;align-items:center;justify-content:center;padding:16px;z-index:20;overflow-y:auto}
+.card{background:#1c2326;border:1px solid rgba(226,220,200,.25);border-radius:6px;width:min(640px,100%);padding:20px;display:flex;flex-direction:column;gap:10px;max-height:100%;overflow-y:auto}
+.card.red{border-color:var(--blood)}
+.card h1{margin:0;font:30px/1.1 var(--font-display)}
+.card .eyebrow{font:600 12px var(--font-ui);letter-spacing:.16em;text-transform:uppercase;color:var(--amber)}
+.card .body{font:16px/1.55 var(--font-display);margin:0}
+.card .big{font:600 22px var(--font-num);margin:0}
+.card ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:0;font-size:14px}
+.keys dt{font:600 13px var(--font-num);color:var(--amber)}
+.keys dd{margin:0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:6px}
+.stats div{background:rgba(0,0,0,.25);border-radius:4px;padding:8px 10px}
+.stats b{display:block;font:600 20px var(--font-num)}
+.stats span{font-size:12px;color:var(--muted)}
+#no3d{display:none}
+.no3d #no3d{display:flex}
+
+@media (max-width:820px){
+  #hud{gap:4px 12px;padding:6px 10px}
+  .brand{font-size:16px}.brand small{display:none}
+  .stat b{font-size:14px}
+  .hide-sm{display:none}
+  #side{top:auto;left:10px;right:10px;width:auto;bottom:calc(84px + env(safe-area-inset-bottom,0px));max-height:34vh}
+  #logbox{display:none}
+  #side.empty{display:none}
+  #bar{right:10px}
+  .bb{flex:0 0 96px}
+  #hint{bottom:calc(84px + env(safe-area-inset-bottom,0px) + 36vh)}
+}
+</style>
+</head>
+<body>
+<div id="view" aria-label="The city, seen from above"></div>
+<header id="hud">
+  <div class="brand">Last Boat to Calder<small>City · prototype</small></div>
+  <div class="stat"><span>Last ship</span><b id="h-time">12:00</b></div>
+  <div class="stat"><span>Funds</span><b id="h-funds" class="warn">$0</b></div>
+  <div class="stat"><span>Evacuated</span><b id="h-evac" class="good">0</b></div>
+  <div class="stat"><span>Dead</span><b id="h-dead" class="bad">0</b></div>
+  <div class="stat hide-sm"><span>Infected</span><b id="h-inf" class="bad">0</b></div>
+  <div class="stat hide-sm"><span>Still in the city</span><b id="h-risk">0</b></div>
+  <div class="stat hide-sm"><span>Score</span><b id="h-pct">0% saved</b></div>
+  <div class="spacer"></div>
+  <div id="speed" role="group" aria-label="Game speed">
+    <button class="sb" data-speed="0" title="Pause (Space)" aria-label="Pause">❚❚</button>
+    <button class="sb" data-speed="1" aria-label="Normal speed">1×</button>
+    <button class="sb" data-speed="2" aria-label="Double speed">2×</button>
+    <button class="sb" data-speed="4" aria-label="Four times speed">4×</button>
+  </div>
+  <button class="sb" data-act="help" aria-label="Field manual">?</button>
+</header>
+<aside id="side">
+  <section id="sel" aria-live="polite"></section>
+  <section id="logbox"><h2>Dispatches</h2><ol id="log"></ol></section>
+</aside>
+<nav id="bar" aria-label="Orders and purchases"></nav>
+<div id="hint" hidden></div>
+<div id="toast" role="alert" hidden></div>
+<div id="overlay" hidden></div>
+<div id="no3d" class="overlay-msg" style="position:fixed;inset:0;align-items:center;justify-content:center;padding:20px;text-align:center">
+  <p>The city needs WebGL and Three.js, which couldn't load here. <a href="../">Play the original Last Boat to Calder</a> instead.</p>
+</div>
+</body>
+</html>
