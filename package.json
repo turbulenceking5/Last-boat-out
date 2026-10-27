@@ -1,12 +1,15 @@
 {
   "name": "last-boat-out",
   "private": true,
-  "description": "Last Boat to Calder: a turn-based zombie outbreak command game in a single HTML file.",
+  "description": "Last Boat to Calder: a turn-based zombie outbreak command game in a single HTML file, with optional Three.js place models.",
   "scripts": {
     "balance": "node tests/sim.js index.html 40 nothing evacAll bEP strikeK crush cutKessler_bot",
-    "fuzz": "node tests/ui.js"
+    "fuzz": "node tests/ui.js",
+    "build:models": "tsc -p models && node models/build.js"
   },
   "devDependencies": {
-    "playwright": "^1.48.0"
+    "@types/three": "0.149.0",
+    "playwright": "^1.48.0",
+    "typescript": "6.0.2"
   }
 }

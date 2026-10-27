@@ -17,6 +17,7 @@ A turn-based zombie outbreak command game. You are the general in charge of Vess
 - Public order and government confidence react to what you do. Promises, scripted decisions and a late-game march keep the pressure on. Some decisions branch: refuse Dr Okafor's escort and she radios again from the hospital roof when St Brennan's is overrun; when the grid fails you choose whether to light the evacuation roads, floodlight the line, or power the field hospitals.
 - You are scored on the share of the population saved. Choose a scenario (Kessler, or a random outbreak), a difficulty, and optionally a seed to replay or share a campaign.
 
+- Selecting a place shows a small 3D model of it that you can drag to turn. Each kind of place has its own model, and it shows what is happening there: troops and vehicles, sandbags, the infected, smoke and fire, burnt-out ruins, refugees leaving, the crowd on the quay, and lit windows at night.
 - At the end of a campaign the after-action report shows how close you came to each grade, a turn-by-turn chart of people shipped out and lost, and the turning points. Your past campaigns and personal bests are kept in your browser, and any campaign can be replayed or shared as a link (for example `#seed=4242&scenario=random&diff=veteran`) that opens the setup screen with the same outbreak filled in.
 
 Press `?` in the game for the field manual. Keys: `E` ends the turn, `U` undoes your last order, `Esc` cancels, `+` and `−` zoom. The game can be played by keyboard alone: `Tab` reaches the map, arrow keys move between places, and `Enter` selects a place or picks a destination. In a dialog, arrow keys step through its buttons. Screen readers hear each place's state and the result of every turn.
@@ -26,10 +27,23 @@ Press `?` in the game for the field manual. Keys: `E` ends the turn, `U` undoes 
 | File | What it is |
 |---|---|
 | `index.html` | The whole game: markup, styles and script in one file, no build step. Progress and your record of past campaigns are saved in the browser's local storage. |
+| `models/src/*.ts` | The 3D place models, written in TypeScript against [Three.js](https://threejs.org/) r149: `kit.ts` (palette and building blocks), `places.ts` (one model per kind of place), `life.ts` (troops, infected, civilians, smoke and fire), `viewer.ts` (the shared renderer the game talks to). |
+| `models/models.js` | The compiled models, committed so the game still needs no build step. `index.html` loads it and Three.js (from the jsDelivr CDN) with plain script tags; if either can't load, or the browser has no WebGL, the game runs without the 3D view. |
 | `tests/strats.js` | A library of scripted strategies (do nothing, evacuate everything, a heuristic bot, and known exploit openings) that play the game through its own functions. |
 | `tests/sim.js` | Plays seeded campaigns per strategy and prints a balance table. |
 | `tests/peek.js` | Plays one seeded campaign with a strategy and prints any expression after every turn, for example `node tests/peek.js index.html bEP 3 "S.sorties"`. |
 | `tests/ui.js` | Clicks and presses keys at random for thousands of steps at desktop and phone sizes, reports any script errors, and saves screenshots to `tests/out/`. |
+
+## Changing the 3D models
+
+Edit the TypeScript in `models/src/`, then rebuild `models/models.js`:
+
+```sh
+npm install
+npm run build:models   # type-checks with tsc, then joins the output into models/models.js
+```
+
+Commit the rebuilt `models/models.js` along with the TypeScript.
 
 ## Running the tests
 
