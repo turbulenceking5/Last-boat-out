@@ -7,7 +7,8 @@ if (typeof THREE === "undefined") { document.documentElement.classList.add("no3d
 // cell indexing, walkability, distance fields (multi-source BFS) and a spatial hash.
 // ---- the grid ----
 // The city is a grid of 1-unit cells. Roads are 2 cells wide every 8 cells; the blocks between are 6x6.
-// The harbour quay runs along the south, and the sea beyond it.
+// The harbour quay runs along the south, and the sea beyond it. The river (columns 55-58, see citygen.ts)
+// is Sea cells, so nothing walks in it; its bridges are ordinary Road and Quay cells.
 const W = 74, H = 70;
 const QUAY_Z = 58, SEA_Z = 64;
 /** Every person-shaped agent stands for this many people. */
@@ -186,9 +187,26 @@ const zHash = new Hash();
 const cHash = new Hash();
 
 // ---- citygen.ts ----
-// Builds the city: a 9 x 7 grid of blocks between 2-cell roads, split into districts,
-// with a harbour quay and the sea along the south and an army base in the north-west corner.
+// Builds the city: a 9 x 7 grid of blocks between 2-cell roads, split into districts, with the River Calder
+// running north to south through the east of the city (four bridges), a harbour quay and the sea along the
+// south, an army base in the north-west corner, and a handful of landmarks. Also lays out the purely visual
+// dressing the view draws: street trees, abandoned cars, and the outskirts beyond the map edge.
 const BLOCKS_X = 9, BLOCKS_Z = 7;
+/** The river: water in these columns, from the north edge to the sea, except where a bridge crosses. */
+const RIVER_X0 = 55, RIVER_X1 = 58;
+/** Rows bridged over the river: three road bridges, and a wide one carrying the last street and the quay. */
+const BRIDGES = [[8, 9], [24, 25], [40, 41], [56, 59]];
+const isRiverCol = (i) => i >= RIVER_X0 && i <= RIVER_X1;
+const isBridgeRow = (j) => BRIDGES.some(([a, b]) => j >= a && j <= b);
+/** How far the visual outskirts reach beyond the map edge (they are never walked on). */
+const OUT = 60;
+/** Gantry cranes along the quay (x of each), clear of the harbour berth and the river mouth. */
+const CRANES = [13, 23, 49, 67];
+/** Roads that run on out of town for good (others peter out): rows to the west and east, columns to the north. */
+const OUT_ROADS = { west: [8, 32], east: [8, 24, 32], north: [16, 40] };
+const MARKET_FOUNTAIN = [idx(20, 28), idx(21, 28), idx(20, 29), idx(21, 29)];
+const MARKET_STALLS = [idx(19, 27), idx(22, 27), idx(19, 30), idx(22, 30)];
+const POND = [idx(35, 28), idx(36, 28), idx(35, 29), idx(36, 29)];
 const POP = { downtown: 1400, residential: 900, suburb: 380, industrial: 140, docks: 220, hospital: 650, park: 0, base: 0 };
 const NAMES = [
     'Ashford Row', 'Cedar Gap', 'Millbrook', 'Harlow Court', 'Marrow Lane', 'Dunmore Terrace', 'Greyfield', 'Saltmarsh', 'Northgate',
@@ -199,13 +217,18 @@ const NAMES = [
     'Salt Quay', 'Pilot Street', 'Anchor Lane', 'Harbour Row', 'Customs House', 'Coal Wharf', 'Fish Market', 'Dock Gate', 'Signal Hill',
     'Beacon Street', 'Hope Street', 'Prospect Row', 'Tower Hill', 'Exchange', 'Guildhall', 'Merchant Row', 'Bank Street', 'Crown Court', 'Victory Row',
 ];
-const trees = []; // x, z, scale
+/** x, z, scale, kind (0 conifer, 1 broadleaf). */
+const trees = [];
+/** Abandoned cars: x, z, heading, colour. */
+const cars = [];
+/** Houses, farms and sheds beyond the map edge. */
+const outskirts = [];
 function districtOf(bx, bz) {
     if (bx === 0 && bz === 0)
         return 'base';
     if (bx === 7 && bz === 2)
         return 'hospital';
-    if ((bx === 4 && bz === 3) || (bx === 1 && bz === 4))
+    if ((bx === 4 && bz === 3) || (bx === 1 && bz === 4) || (bx === 2 && bz === 3))
         return 'park';
     if (bz === BLOCKS_Z - 1)
         return 'docks';
@@ -217,14 +240,29 @@ function districtOf(bx, bz) {
         return 'suburb';
     return 'residential';
 }
+const LANDMARKS = {
+    '0,0': ['base', 'Fort Aldermoor'], '7,2': ['hospital', "St Brennan's Hospital"], '4,3': ['victory', 'Victory Park'],
+    '1,4': ['millbrook', 'Millbrook Park'], '2,3': ['market', 'Market Square'], '3,3': ['cathedral', 'Calder Cathedral'],
+    '0,3': ['station', 'Central Station'], '3,4': ['townhall', 'City Hall'], '5,0': ['stadium', 'Calder Park Stadium'],
+};
+/** People sheltering in the landmarks that hold more than their district would. */
+const LANDMARK_POP = { stadium: 1400, station: 800, cathedral: 1200 };
 function generateCity(rnd) {
+    var _a;
     G.grid.fill(0 /* Cell.Road */);
     G.blockAt.fill(-1);
     G.doorOf.fill(-1);
     trees.length = 0;
+    cars.length = 0;
+    outskirts.length = 0;
     for (let j = QUAY_Z; j < H; j++)
         for (let i = 0; i < W; i++)
             G.grid[idx(i, j)] = j >= SEA_Z ? 4 /* Cell.Sea */ : 3 /* Cell.Quay */;
+    // the river: open water except where the bridges cross
+    for (let j = 0; j < SEA_Z; j++)
+        for (let i = RIVER_X0; i <= RIVER_X1; i++)
+            if (!isBridgeRow(j))
+                G.grid[idx(i, j)] = 4 /* Cell.Sea */;
     const names = NAMES.slice();
     for (let i = names.length - 1; i > 0; i--) {
         const k = Math.floor(rnd() * (i + 1));
@@ -232,19 +270,36 @@ function generateCity(rnd) {
     }
     for (let bz = 0; bz < BLOCKS_Z; bz++)
         for (let bx = 0; bx < BLOCKS_X; bx++) {
-            const district = districtOf(bx, bz), x0 = bx * 8 + 2, z0 = bz * 8 + 2, id = G.blocks.length;
-            const popMax = Math.round(POP[district] * (0.8 + rnd() * 0.4) / PER_AGENT) * PER_AGENT;
-            const name = district === 'base' ? 'Fort Aldermoor' : district === 'hospital' ? "St Brennan's Hospital" : district === 'park' ? (bx === 4 ? 'Victory Park' : 'Millbrook Park') : names[id % names.length];
-            const b = { id, bx, bz, x0, z0, name, district, pop: popMax, popMax, evacuating: false, fallen: false, emitT: 0, doors: [], buildings: [], lastPanicCheck: 0, breach: 0, convertT: 0 };
+            const district = districtOf(bx, bz), id = G.blocks.length, z0 = bz * 8 + 2, d = 6;
+            // blocks beside the river lose the column it runs through
+            let x0 = bx * 8 + 2, x1 = x0 + 6;
+            if (x0 < RIVER_X0 && x1 > RIVER_X0)
+                x1 = RIVER_X0;
+            if (x0 <= RIVER_X1 && x1 > RIVER_X1 + 1)
+                x0 = RIVER_X1 + 1;
+            const w = x1 - x0;
+            const lm = LANDMARKS[`${bx},${bz}`];
+            const popMax = Math.round(((_a = (lm && LANDMARK_POP[lm[0]])) !== null && _a !== void 0 ? _a : POP[district]) * (0.8 + rnd() * 0.4) / PER_AGENT) * PER_AGENT;
+            const b = {
+                id, bx, bz, x0, z0, w, d, name: lm ? lm[1] : names[id % names.length], landmark: lm ? lm[0] : undefined, district,
+                pop: popMax, popMax, evacuating: false, fallen: false, emitT: 0, doors: [], buildings: [], lastPanicCheck: 0, breach: 0, convertT: 0,
+            };
             const open = district === 'park' || district === 'base';
-            for (let j = z0; j < z0 + 6; j++)
-                for (let i = x0; i < x0 + 6; i++) {
-                    G.grid[idx(i, j)] = district === 'park' ? 2 /* Cell.Park */ : district === 'base' ? 5 /* Cell.Base */ : 1 /* Cell.Building */;
+            for (let j = z0; j < z0 + d; j++)
+                for (let i = x0; i < x0 + w; i++) {
+                    // the market square is paved street; parks are grass; the fort is open ground
+                    G.grid[idx(i, j)] = b.landmark === 'market' ? 0 /* Cell.Road */ : district === 'park' ? 2 /* Cell.Park */ : district === 'base' ? 5 /* Cell.Base */ : 1 /* Cell.Building */;
                     G.blockAt[idx(i, j)] = id;
                 }
+            if (b.landmark === 'market')
+                for (const c of MARKET_FOUNTAIN.concat(MARKET_STALLS))
+                    G.grid[c] = 1 /* Cell.Building */;
+            if (b.landmark === 'victory')
+                for (const c of POND)
+                    G.grid[c] = 4 /* Cell.Sea */;
             if (!open) {
                 for (const k of [2, 3])
-                    for (const [i, j] of [[x0 - 1, z0 + k], [x0 + 6, z0 + k], [x0 + k, z0 - 1], [x0 + k, z0 + 6]]) {
+                    for (const [i, j] of [[x0 - 1, z0 + k], [x0 + w, z0 + k], [x0 + k, z0 - 1], [x0 + k, z0 + d]]) {
                         if (!inside(i, j))
                             continue;
                         const c = idx(i, j);
@@ -258,61 +313,384 @@ function generateCity(rnd) {
             G.blocks.push(b);
         }
     G.hq = idx(5, 5);
+    dressStreets(seeded(1027));
+    buildOutskirts(seeded(2026));
 }
 const PAL = {
     stone: 0xc9c1ab, sand: 0xd8cbb0, cream: 0xe4dfcf, brick: 0xa0644a, brick2: 0x8a5a44, slate: 0x7d8790, glass: 0x8fa3ad,
     concrete: 0xa9a59a, tankPaint: 0xb3ad9c, rust: 0x9a6b4a, white: 0xeeeae0, roofRed: 0x8a4b3a, roofGrey: 0x5d6b72, roofBrown: 0x6e5a48, tar: 0x4a4a46,
+    ochre: 0xc49a5a, teal: 0x6f8f8a, glass2: 0x6d8796, sandstone: 0xcdb48c, verdigris: 0x6f9a86, lead: 0x5a6266,
 };
+const CONTAINERS = [0xa4473a, 0x3f6f8f, 0xc28a3a, 0x5d7a4a, 0x8a8f94, 0x7a4a6a];
 const pick = (rnd, a) => a[Math.floor(rnd() * a.length)];
-/** Lay out the buildings inside a block's 6x6 footprint. */
+/** Lay out the buildings inside a block's footprint. Layouts are drawn for 6 x 6 and squeezed to fit narrower blocks. */
 function furnish(b, rnd) {
-    const { x0, z0 } = b, add = (x, z, w, d, h, color, roof, kind) => b.buildings.push({ x: x0 + x, z: z0 + z, w, d, h, color, roof, kind });
-    switch (b.district) {
-        case 'downtown':
-            if (rnd() < 0.5)
-                add(3, 3, 4.8, 4.8, 9 + rnd() * 7, pick(rnd, [PAL.glass, PAL.stone, PAL.slate]), PAL.tar, 'tower');
-            else {
-                const h = 6 + rnd() * 6;
-                add(3, 1.6, 4.8, 2.4, h, pick(rnd, [PAL.glass, PAL.stone]), PAL.tar, 'tower');
-                add(3, 4.5, 4.8, 2.2, h * (0.6 + rnd() * 0.5), pick(rnd, [PAL.slate, PAL.sand]), PAL.tar, 'tower');
+    const { x0, z0 } = b, sx = b.w / 6;
+    const add = (x, z, w, d, h, color, roof, kind, o = {}) => b.buildings.push({ x: x0 + x * sx, z: z0 + z, w: w * sx, d, h, color, roof, kind, ...o });
+    const tree = (x, z, s, kind = 1) => trees.push([x0 + x * sx, z0 + z, s, kind]);
+    /** Rooftop plant on a flat roof: air handlers and a water tank or two. */
+    const plant = (x, z, w, d, h) => {
+        const n = Math.floor(rnd() * 3);
+        for (let k = 0; k < n; k++)
+            add(x + (rnd() - 0.5) * w * 0.5, z + (rnd() - 0.5) * d * 0.5, 0.5, 0.4, 0.28, 0x8d9290, 0, 'box', { y: h });
+        if (rnd() < 0.35)
+            add(x + w * 0.25, z - d * 0.2, 0.45, 0.45, 0.5, 0x6b5a48, 0, 'chimney', { y: h });
+    };
+    const flat = (x, z, w, d, h, color, kind = 'flat') => {
+        add(x, z, w, d, h, color, PAL.tar, kind);
+        plant(x, z, w, d, h);
+    };
+    const resColor = () => pick(rnd, [PAL.brick, PAL.cream, PAL.sand, PAL.brick2, PAL.ochre]);
+    switch (b.landmark) {
+        case 'hospital': {
+            // an H of white wards round a taller core, a red cross on the roof, ambulances at the door
+            add(1.0, 3, 1.8, 5.6, 3.4, PAL.white, PAL.concrete, 'flat');
+            add(5.0, 3, 1.8, 5.6, 3.4, PAL.white, PAL.concrete, 'flat');
+            add(3, 3, 2.4, 2.4, 4.6, 0xdfe6e4, PAL.concrete, 'flat');
+            add(3, 3, 1.8, 0.55, 0.06, 0xc4332f, 0, 'box', { y: 4.74 });
+            add(3, 3, 0.55, 1.8, 0.06, 0xc4332f, 0, 'box', { y: 4.74 });
+            add(3, 0.55, 0.55, 1.0, 0.5, 0xf2f0ea, 0, 'box', { ry: Math.PI / 2 });
+            add(3, 5.45, 0.55, 1.0, 0.5, 0xf2f0ea, 0, 'box', { ry: Math.PI / 2 });
+            return;
+        }
+        case 'cathedral': {
+            // west front with twin towers, a nave with aisles, a transept, an apse, and a spire over the crossing
+            const stone = PAL.sandstone, roof = PAL.lead;
+            add(3.1, 3, 4.4, 1.7, 2.5, stone, roof, 'house', { roofH: 1.3 });
+            add(3.2, 1.75, 3.8, 0.8, 1.5, stone, roof, 'shed', { roofH: 0.35 });
+            add(3.2, 4.25, 3.8, 0.8, 1.5, stone, roof, 'shed', { roofH: 0.35 });
+            add(3.9, 3, 1.5, 4.8, 2.5, stone, roof, 'house', { roofH: 1.3 });
+            add(5.35, 3, 1.3, 1.3, 2.3, stone, roof, 'tank');
+            add(5.35, 3, 1.35, 1.35, 1.0, roof, roof, 'spire', { y: 2.3 });
+            for (const z of [2.2, 3.8]) {
+                add(0.75, z, 1.0, 1.0, 4.4, stone, roof, 'flat');
+                add(0.75, z, 0.95, 0.95, 1.9, PAL.verdigris, 0, 'spire', { y: 4.45 });
             }
-            break;
-        case 'residential':
-            for (const [x, z] of [[1.5, 1.5], [4.5, 1.5], [1.5, 4.5], [4.5, 4.5]])
-                add(x, z, 2.5, 2.5, 2.4 + rnd() * 2.2, pick(rnd, [PAL.brick, PAL.cream, PAL.sand, PAL.brick2]), PAL.tar, 'flat');
-            break;
-        case 'suburb':
-            for (const [x, z] of [[1.4, 1.3], [4.6, 1.3], [1.4, 4.7], [4.6, 4.7], [3, 3]]) {
-                if (x === 3 && rnd() < 0.5) {
-                    trees.push([x0 + x, z0 + z, 0.9 + rnd() * 0.4]);
-                    continue;
-                }
-                add(x, z, 2.0, 1.7, 1.1, pick(rnd, [PAL.cream, PAL.sand, PAL.white, PAL.brick]), pick(rnd, [PAL.roofRed, PAL.roofGrey, PAL.roofBrown]), 'house');
+            add(3.9, 3, 1.0, 1.0, 1.3, stone, roof, 'box', { y: 2.5 });
+            add(3.9, 3, 0.85, 0.85, 4.2, PAL.verdigris, 0, 'spire', { y: 3.8 });
+            for (const [x, z] of [[0.6, 0.6], [0.6, 5.4], [5.6, 0.6], [5.6, 5.4]])
+                tree(x, z, 0.75);
+            return;
+        }
+        case 'station': {
+            // platforms under long canopies, the tracks running out west, a booking hall and clock tower facing the city
+            add(5.1, 3, 1.6, 5.6, 2.2, PAL.brick, PAL.roofGrey, 'house', { roofH: 0.9 });
+            add(5.1, 3, 0.9, 0.9, 4.0, PAL.brick2, PAL.lead, 'flat');
+            add(5.1, 3, 0.9, 0.9, 0.9, PAL.lead, 0, 'spire', { y: 4.0 });
+            for (const z of [1.2, 3.0, 4.8]) {
+                add(2.1, z, 4.2, 0.9, 0.12, 0x5d6b72, 0, 'box', { y: 1.15 });
+                for (const x of [0.6, 2.1, 3.6])
+                    add(x, z, 0.1, 0.1, 1.15, 0x3a3f42, 0, 'box');
             }
-            break;
-        case 'industrial':
-            add(2.4, 2.2, 4.2, 3.6, 2.2 + rnd() * 0.8, pick(rnd, [PAL.concrete, PAL.rust]), PAL.roofGrey, 'shed');
-            add(4.9, 4.9, 1.6, 1.6, 1.8, PAL.tankPaint, PAL.concrete, 'tank');
-            if (rnd() < 0.6)
-                add(1.6, 5.0, 1.4, 1.4, 1.5, PAL.tankPaint, PAL.concrete, 'tank');
-            break;
-        case 'docks':
-            add(3, 1.6, 5.4, 2.4, 2.0, pick(rnd, [PAL.rust, PAL.concrete, PAL.brick2]), PAL.roofGrey, 'shed');
-            add(3, 4.5, 5.4, 2.2, 1.8, pick(rnd, [PAL.concrete, PAL.slate]), PAL.roofGrey, 'shed');
-            break;
-        case 'hospital':
-            add(3, 2.4, 5.4, 3.0, 4.2, PAL.white, PAL.concrete, 'flat');
-            add(1.4, 4.8, 2.4, 2.0, 2.6, PAL.white, PAL.concrete, 'flat');
-            add(4.6, 4.8, 2.4, 2.0, 2.6, PAL.white, PAL.concrete, 'flat');
-            break;
-        case 'park':
-            for (let k = 0; k < 14; k++)
-                trees.push([x0 + 0.5 + rnd() * 5, z0 + 0.5 + rnd() * 5, 0.8 + rnd() * 0.6]);
-            break;
+            add(1.9, 2.1, 3.4, 0.55, 0.6, 0x8a3a30, 0, 'box');
+            add(1.9, 2.1, 3.4, 0.5, 0.12, 0x2b3438, 0, 'box', { y: 0.6 });
+            add(1.0, 3.9, 1.8, 0.55, 0.6, 0x3f5a6a, 0, 'box');
+            return;
+        }
+        case 'townhall': {
+            // a low civic hall with wings, a portico and a dome, so the cathedral behind it can be seen from the south
+            const stone = PAL.cream;
+            add(3, 2.6, 5.4, 2.6, 2.2, stone, PAL.lead, 'flat');
+            add(0.9, 4.5, 1.6, 2.4, 1.8, stone, PAL.lead, 'flat');
+            add(5.1, 4.5, 1.6, 2.4, 1.8, stone, PAL.lead, 'flat');
+            add(3, 2.6, 1.9, 1.9, 0.7, stone, 0, 'tank', { y: 2.2 });
+            add(3, 2.6, 1.9, 1.9, 1.0, PAL.verdigris, 0, 'dome', { y: 2.9 });
+            add(3, 2.6, 0.18, 0.18, 0.5, PAL.verdigris, 0, 'chimney', { y: 3.8 });
+            for (let k = 0; k < 6; k++)
+                add(1.9 + k * 0.44, 4.15, 0.16, 0.16, 1.7, 0xeeeae0, 0, 'chimney');
+            add(3, 4.15, 2.6, 0.5, 0.2, stone, 0, 'box', { y: 1.7 });
+            add(3, 4.15, 2.6, 0.6, 0.35, stone, PAL.lead, 'house', { y: 1.9, roofH: 0.35 });
+            for (const x of [2.2, 3.8])
+                tree(x, 5.4, 0.55);
+            return;
+        }
+        case 'stadium': {
+            // an oval bowl of stands round the pitch, a lower tier inside, and floodlights at the corners
+            const cx = 3, cz = 3, n = 26;
+            for (let k = 0; k < n; k++) {
+                const a = (k / n) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+                add(cx + ca * 2.75, cz + sa * 2.45, 0.9, 0.8, 1.5, PAL.concrete, 0, 'box', { ry: -a + Math.PI / 2 });
+                add(cx + ca * 2.05, cz + sa * 1.8, 0.75, 0.6, 0.75, 0x9a3a34, 0, 'box', { ry: -a + Math.PI / 2 });
+                add(cx + ca * 2.6, cz + sa * 2.3, 0.86, 0.9, 0.08, 0xd8d6cf, 0, 'box', { y: 1.65, ry: -a + Math.PI / 2 });
+            }
+            for (const [x, z] of [[0.3, 0.4], [5.7, 0.4], [0.3, 5.6], [5.7, 5.6]]) {
+                add(x, z, 0.14, 0.14, 3.2, 0x5d666a, 0, 'chimney');
+                add(x, z, 0.6, 0.5, 0.25, 0xe8e4d4, 0, 'box', { y: 3.2, ry: Math.atan2(cz - z, cx - x) });
+            }
+            return;
+        }
+        case 'market': {
+            // the fountain and four stalls stand on the cells citygen keeps unwalkable
+            add(3, 3, 1.8, 1.8, 0.28, 0xb8b09a, 0, 'tank');
+            add(3, 3, 1.5, 1.5, 0.04, 0x5f8a96, 0, 'tank', { y: 0.28 });
+            add(3, 3, 0.3, 0.3, 1.1, 0xb8b09a, 0, 'chimney');
+            add(3, 3, 0.7, 0.7, 0.15, 0xb8b09a, 0, 'tank', { y: 0.75 });
+            const awn = [0xc4432f, 0x3d6a8a, 0xd2a65a, 0x6f8f6a];
+            [[1.5, 1.5], [4.5, 1.5], [1.5, 4.5], [4.5, 4.5]].forEach(([x, z], k) => {
+                add(x, z, 0.8, 0.7, 0.55, 0x8a6b44, 0, 'box');
+                add(x, z, 1.0, 0.9, 0.05, awn[k], awn[k], 'house', { y: 0.6, roofH: 0.3 });
+            });
+            for (const [x, z] of [[0.4, 0.4], [5.6, 0.4], [0.4, 5.6], [5.6, 5.6]])
+                tree(x, z, 0.8);
+            return;
+        }
+        case 'victory':
+            for (let k = 0; k < 16; k++) {
+                const x = 0.5 + rnd() * 5, z = 0.5 + rnd() * 5;
+                if (Math.abs(x - 1.9) < 1.6 && Math.abs(z - 3) < 1.4)
+                    continue; // the pond
+                tree(x, z, 0.8 + rnd() * 0.6, rnd() < 0.5 ? 1 : 0);
+            }
+            add(4.6, 3, 0.5, 0.5, 0.35, 0xb8b09a, 0, 'box');
+            add(4.6, 3, 0.22, 0.22, 2.2, 0xd8d2bf, 0, 'box', { y: 0.35 });
+            return;
+        case 'millbrook':
+            for (let k = 0; k < 16; k++)
+                tree(0.5 + rnd() * 5, 0.5 + rnd() * 5, 0.8 + rnd() * 0.6, rnd() < 0.6 ? 0 : 1);
+            add(3, 3, 1.6, 1.6, 0.6, 0xd8d2bf, PAL.roofRed, 'tank');
+            add(3, 3, 1.9, 1.9, 0.7, PAL.roofRed, 0, 'spire', { y: 0.6 });
+            return;
         case 'base':
             add(1.2, 1.0, 2.2, 1.2, 1.0, 0x8c8456, 0x55633a, 'house');
             add(4.6, 1.0, 2.2, 1.2, 1.0, 0x8c8456, 0x55633a, 'house');
+            add(0.6, 4.6, 1.0, 2.2, 1.0, 0x8c8456, 0x55633a, 'house');
+            add(5.6, 0.5, 0.3, 0.3, 2.6, 0x6b6b5a, 0, 'box');
+            return;
+    }
+    switch (b.district) {
+        case 'downtown': {
+            const r = rnd();
+            if (r < 0.3) {
+                // a tower with a setback crown
+                const h = 8 + rnd() * 6, c = pick(rnd, [PAL.glass, PAL.stone, PAL.slate, PAL.glass2]);
+                add(3, 3, 4.8, 4.8, h, c, PAL.tar, 'tower');
+                const h2 = 2 + rnd() * 4;
+                add(3, 3, 3.2, 3.2, h2, c, PAL.tar, 'tower', { y: h });
+                plant(3, 3, 3.2, 3.2, h + h2);
+            }
+            else if (r < 0.55) {
+                const h = 6 + rnd() * 6;
+                flat(3, 1.6, 4.8, 2.4, h, pick(rnd, [PAL.glass, PAL.stone]), 'tower');
+                flat(3, 4.5, 4.8, 2.2, h * (0.6 + rnd() * 0.5), pick(rnd, [PAL.slate, PAL.sand]), 'tower');
+            }
+            else if (r < 0.8) {
+                // a podium with a slim tower on it
+                const c = pick(rnd, [PAL.stone, PAL.sand, PAL.cream]);
+                add(3, 3, 5.6, 5.6, 2.2, c, PAL.tar, 'flat');
+                const h = 7 + rnd() * 8;
+                add(3.4, 2.6, 3.0, 3.0, h, pick(rnd, [PAL.glass, PAL.glass2, PAL.slate]), PAL.tar, 'tower', { y: 2.2 });
+                plant(3.4, 2.6, 3.0, 3.0, 2.2 + h);
+                tree(1.0, 5.0, 0.6);
+                tree(5.0, 5.0, 0.6);
+            }
+            else {
+                // an L of offices round a corner plaza
+                const h = 5 + rnd() * 5, c = pick(rnd, [PAL.stone, PAL.slate, PAL.sand]);
+                flat(1.5, 3, 2.6, 5.6, h, c, 'tower');
+                flat(4.4, 1.5, 3.0, 2.6, h * 0.75, c, 'tower');
+                tree(4.0, 4.4, 0.7);
+                tree(5.1, 5.1, 0.7);
+            }
             break;
+        }
+        case 'residential': {
+            const r = rnd();
+            if (r < 0.3) {
+                // a perimeter block round a courtyard
+                const c = resColor(), h = 2.2 + rnd() * 1.8;
+                flat(3, 0.85, 5.8, 1.6, h, c);
+                flat(3, 5.15, 5.8, 1.6, h * (0.85 + rnd() * 0.3), c);
+                flat(0.85, 3, 1.6, 2.6, h, c);
+                flat(5.15, 3, 1.6, 2.6, h * (0.8 + rnd() * 0.3), c);
+                tree(3, 3, 0.75);
+            }
+            else if (r < 0.5) {
+                // two terraces of townhouses with back gardens between
+                const c = resColor(), roof = pick(rnd, [PAL.roofRed, PAL.roofGrey, PAL.roofBrown]);
+                for (const x of [1, 3, 5]) {
+                    add(x, 1.0, 1.9, 1.9, 1.4 + rnd() * 0.5, c, roof, 'house', { roofH: 0.6 });
+                    add(x, 5.0, 1.9, 1.9, 1.4 + rnd() * 0.5, c, roof, 'house', { roofH: 0.6 });
+                }
+                tree(1.5, 3, 0.65);
+                tree(4.5, 3, 0.7);
+            }
+            else if (r < 0.7) {
+                // an L-shaped block with a lower wing
+                const c = resColor(), h = 2.8 + rnd() * 2;
+                flat(1.4, 3, 2.6, 5.6, h, c);
+                flat(4.4, 1.4, 3.0, 2.6, h * 0.8, c);
+                flat(4.5, 4.6, 2.4, 2.4, 1.6 + rnd(), resColor());
+                tree(3.6, 3.4, 0.55);
+            }
+            else {
+                for (const [x, z] of [[1.5, 1.5], [4.5, 1.5], [1.5, 4.5], [4.5, 4.5]])
+                    flat(x, z, 2.5, 2.5, 2.4 + rnd() * 2.2, resColor());
+            }
+            break;
+        }
+        case 'suburb':
+            for (const [x, z] of [[1.4, 1.3], [4.6, 1.3], [1.4, 4.7], [4.6, 4.7], [3, 3]]) {
+                if (x === 3 && rnd() < 0.5) {
+                    tree(x, z, 0.9 + rnd() * 0.4, rnd() < 0.5 ? 0 : 1);
+                    continue;
+                }
+                const turn = rnd() < 0.3;
+                add(x, z, turn ? 1.7 : 2.0, turn ? 2.0 : 1.7, 1.0 + rnd() * 0.3, pick(rnd, [PAL.cream, PAL.sand, PAL.white, PAL.brick]), pick(rnd, [PAL.roofRed, PAL.roofGrey, PAL.roofBrown]), 'house');
+            }
+            tree(0.3, 3, 0.6);
+            tree(5.7, 3, 0.6);
+            break;
+        case 'industrial': {
+            const r = rnd();
+            if (r < 0.35) {
+                // a gasholder in its guide frame, and a pump house
+                const h = 2.4 + rnd();
+                add(2.6, 2.8, 4.0, 4.0, h, 0x6f7a72, 0, 'tank');
+                add(2.6, 2.8, 4.1, 4.1, 0.12, 0x4f5852, 0, 'tank', { y: h });
+                for (let k = 0; k < 8; k++) {
+                    const a = k * Math.PI / 4, a2 = a + Math.PI / 8;
+                    add(2.6 + Math.cos(a) * 2.15, 2.8 + Math.sin(a) * 2.15, 0.12, 0.12, h + 0.7, 0x7a4f3c, 0, 'chimney');
+                    add(2.6 + Math.cos(a2) * 2.0, 2.8 + Math.sin(a2) * 2.0, 1.7, 0.08, 0.1, 0x7a4f3c, 0, 'box', { y: h + 0.6, ry: -a2 - Math.PI / 2 });
+                }
+                add(5.0, 5.0, 1.6, 1.4, 1.3, PAL.brick2, PAL.roofGrey, 'shed');
+            }
+            else if (r < 0.7) {
+                // a works shed with a sawtooth roof and a tall chimney
+                const c = pick(rnd, [PAL.concrete, PAL.rust, PAL.brick2]), h = 1.8 + rnd() * 0.6;
+                for (const x of [1.2, 2.6, 4.0])
+                    add(x, 2.6, 1.4, 4.4, h, c, PAL.roofGrey, 'shed', { roofH: 0.6 });
+                add(5.3, 1.0, 0.55, 0.55, 5.5 + rnd() * 2, PAL.brick2, 0, 'chimney');
+                add(5.0, 5.0, 1.4, 1.4, 1.5, PAL.tankPaint, PAL.concrete, 'tank');
+            }
+            else {
+                add(2.4, 2.2, 4.2, 3.6, 2.2 + rnd() * 0.8, pick(rnd, [PAL.concrete, PAL.rust]), PAL.roofGrey, 'shed', { roofH: 0.5 });
+                add(4.9, 4.9, 1.6, 1.6, 1.8, PAL.tankPaint, PAL.concrete, 'tank');
+                if (rnd() < 0.6)
+                    add(1.6, 5.0, 1.4, 1.4, 1.5, PAL.tankPaint, PAL.concrete, 'tank');
+            }
+            break;
+        }
+        case 'docks': {
+            // a warehouse on the street side, and a yard of stacked containers or a second shed toward the quay
+            const r = rnd();
+            if (r < 0.3) {
+                // one long transit shed, its loading bays facing the quay, and an office
+                add(3, 2.6, 5.6, 3.8, 2.4, pick(rnd, [PAL.concrete, PAL.brick2]), 0x5a6a62, 'shed', { roofH: 0.7 });
+                add(1.2, 5.3, 2.0, 1.0, 1.4, PAL.cream, PAL.tar, 'flat');
+                for (const x of [3.2, 4.0, 4.8])
+                    add(x, 4.75, 0.5, 0.5, 0.5, pick(rnd, CONTAINERS), 0, 'box');
+                break;
+            }
+            add(3, 1.6, 5.4, 2.4, 2.0, pick(rnd, [PAL.rust, PAL.concrete, PAL.brick2]), PAL.roofGrey, 'shed', { roofH: 0.55 });
+            if (r < 0.7) {
+                for (let row = 0; row < 2; row++)
+                    for (let col = 0; col < 4; col++) {
+                        const n = 1 + Math.floor(rnd() * 3);
+                        for (let k = 0; k < n; k++)
+                            add(0.9 + col * 1.4, 4.0 + row * 1.0, 1.25, 0.6, 0.5, pick(rnd, CONTAINERS), 0, 'box', { y: k * 0.5 });
+                    }
+            }
+            else
+                add(3, 4.5, 5.4, 2.2, 1.8, pick(rnd, [PAL.concrete, PAL.slate]), PAL.roofGrey, 'shed', { roofH: 0.45 });
+            break;
+        }
+    }
+}
+/** Street trees along the boulevards, and abandoned cars on the roads: purely visual. */
+function dressStreets(rnd) {
+    const road = (i, j) => inside(i, j) && j < QUAY_Z && G.grid[idx(i, j)] === 0 /* Cell.Road */ && G.blockAt[idx(i, j)] < 0;
+    // plane trees on the pavements of the High Street (rows 32-33) and Kings Parade (columns 32-33)
+    for (let t = 1; t < W - 1; t += 1.6) {
+        for (const z of [32.22, 33.78]) {
+            if (t % 8 < 2.4 || t % 8 > 7.6 || isRiverCol(Math.floor(t)) || isRiverCol(Math.floor(t + 0.6)))
+                continue;
+            trees.push([t, z, 0.55 + rnd() * 0.15, 1]);
+        }
+    }
+    for (let t = 1; t < QUAY_Z - 1; t += 1.6) {
+        for (const x of [32.22, 33.78]) {
+            if (t % 8 < 2.4 || t % 8 > 7.6)
+                continue;
+            trees.push([x, t, 0.55 + rnd() * 0.15, 1]);
+        }
+    }
+    const COLORS = [0x8a8f94, 0x3d5a78, 0x7a2f2a, 0xc9c4b4, 0x2f3a33, 0x5b4a3a, 0x9a8a5a, 0x4a5258];
+    for (let j = 0; j < QUAY_Z; j++)
+        for (let i = 0; i < W; i++) {
+            if (!road(i, j) || rnd() > 0.05)
+                continue;
+            const vert = i % 8 < 2, horiz = j % 8 < 2;
+            if (vert === horiz)
+                continue; // keep the junctions clear
+            if (i < 10 && j < 10)
+                continue; // the fort's gate
+            const burnt = rnd() < 0.25, color = burnt ? 0x2b2725 : pick(rnd, COLORS);
+            const crash = rnd() < 0.3, side = (vert ? i % 8 : j % 8) === 0 ? 0.68 : 1.32;
+            const along = (vert ? j : i) + 0.2 + rnd() * 0.6;
+            let x = vert ? i - (i % 8) + side : along, z = vert ? along : j - (j % 8) + side;
+            let hd = (vert ? 0 : Math.PI / 2) + (rnd() < 0.5 ? 0 : Math.PI);
+            if (crash) {
+                hd += (rnd() - 0.5) * 1.6;
+                x += vert ? (rnd() - 0.5) * 0.4 : 0;
+                z += vert ? 0 : (rnd() - 0.5) * 0.4;
+            }
+            cars.push([x, z, hd, color]);
+        }
+}
+/**
+ * The outskirts beyond the map: suburbs thinning into farmland to the north, west and east, along the city's
+ * own streets carried on out of town. Nothing here is ever walked on; it is scenery.
+ */
+function buildOutskirts(rnd) {
+    const roofs = [PAL.roofRed, PAL.roofGrey, PAL.roofBrown], walls = [PAL.cream, PAL.sand, PAL.white, PAL.brick, PAL.ochre];
+    for (let z = -OUT + 2; z < SEA_Z - 2; z += 3)
+        for (let x = -OUT + 2; x < W + OUT - 2; x += 3) {
+            const cx = x + 1.5, cz = z + 1.5;
+            // distance from the city edge
+            const d = Math.max(-cx, cx - W, -cz, 0);
+            if (d < 3)
+                continue;
+            if (cz < 0 && cx > RIVER_X0 - 3 && cx < RIVER_X1 + 4)
+                continue; // the river
+            if (cx < 0 && cz > 26 && cz < 32)
+                continue; // the railway
+            // the main roads out of town
+            if (cx < 0 && OUT_ROADS.west.some(j => Math.abs(cz - j - 1) < 2.6))
+                continue;
+            if (cx > W && OUT_ROADS.east.some(j => Math.abs(cz - j - 1) < 2.6))
+                continue;
+            if (cz < 0 && OUT_ROADS.north.some(i => Math.abs(cx - i - 1) < 2.6))
+                continue;
+            // the city's streets carry on outwards
+            const onRoad = (cx < 0 || cx > W) ? ((cz % 8) + 8) % 8 < 2.6 && cz > 0 : ((cx % 8) + 8) % 8 < 2.6;
+            if (onRoad && d < 26)
+                continue;
+            const p = 0.8 * Math.exp(-d / 13);
+            const r = rnd();
+            if (r < p) {
+                const turn = rnd() < 0.5, w = 1.5 + rnd() * 0.5, dd = 1.3 + rnd() * 0.4;
+                outskirts.push({ x: cx + (rnd() - 0.5) * 0.6, z: cz + (rnd() - 0.5) * 0.6, w: turn ? dd : w, d: turn ? w : dd, h: 0.9 + rnd() * 0.4, color: pick(rnd, walls), roof: pick(rnd, roofs), kind: 'house' });
+                if (rnd() < 0.5)
+                    trees.push([cx + (rnd() < 0.5 ? -1.2 : 1.2), cz + (rnd() - 0.5) * 2, 0.6 + rnd() * 0.4, rnd() < 0.5 ? 0 : 1]);
+            }
+            else if (r < p + 0.12 + d * 0.004) {
+                // woods and hedgerow trees, more of them further out
+                const n = 1 + Math.floor(rnd() * 3);
+                for (let k = 0; k < n; k++)
+                    trees.push([cx + (rnd() - 0.5) * 2.6, cz + (rnd() - 0.5) * 2.6, 0.8 + rnd() * 0.7, rnd() < 0.6 ? 0 : 1]);
+            }
+            else if (d > 20 && rnd() < 0.025) {
+                // a farm: a barn and a silo
+                outskirts.push({ x: cx, z: cz, w: 2.2, d: 1.4, h: 1.2, color: 0x8a3a30, roof: PAL.roofGrey, kind: 'shed', roofH: 0.7 });
+                outskirts.push({ x: cx + 1.6, z: cz, w: 0.8, d: 0.8, h: 2.4, color: 0xb3ad9c, roof: 0, kind: 'tank' });
+            }
+        }
+    // the jam on the road east, where the horde comes from
+    const COLORS = [0x8a8f94, 0x3d5a78, 0x7a2f2a, 0xc9c4b4, 0x2f3a33, 0x5b4a3a];
+    for (let x = W + 1; x < W + 40; x += 0.9 + rnd() * 1.4) {
+        if (rnd() < 0.25)
+            continue;
+        cars.push([x, 32.5 + (rnd() < 0.5 ? 0 : 1) + (rnd() - 0.5) * 0.3, Math.PI / 2 + (rnd() - 0.5) * 0.5, rnd() < 0.3 ? 0x2b2725 : pick(rnd, COLORS)]);
     }
 }
 
@@ -1171,140 +1549,662 @@ function setInst(im, k, x, y, z, sx, sy, sz, ry = 0, rx = 0, color) {
 }
 // ---- static city ----
 const blockInst = new Map();
+const GROUND_PX = 16; // texels per cell for the city ground
+const OUT_PX = 5; // and for the outskirts
+/** Scatter n small dots of the given colours over a rectangle: grain for asphalt, grass and gravel. */
+function speckle(g, r, x, y, w, h, colors, n, size) {
+    for (let k = 0; k < n; k++) {
+        g.fillStyle = colors[k % colors.length];
+        const s = size * (0.5 + r());
+        g.fillRect(x + r() * w, y + r() * h, s, s);
+    }
+}
+function grass(g, r, x, y, w, h, base = '#6c8650') {
+    g.fillStyle = base;
+    g.fillRect(x, y, w, h);
+    speckle(g, r, x, y, w, h, ['rgba(140,170,90,.35)', 'rgba(40,60,30,.25)', 'rgba(170,190,110,.25)'], Math.floor(w * h / 18), 3);
+}
+/** A pair of rails on sleepers from (x1, z) to (x2, z), in pixels. */
+function railTrack(g, x1, x2, z, px) {
+    g.fillStyle = '#5b5148';
+    for (let x = x1; x < x2; x += px * 0.28)
+        g.fillRect(x, z - px * 0.32, px * 0.12, px * 0.64);
+    g.fillStyle = '#9aa0a3';
+    g.fillRect(x1, z - px * 0.22, x2 - x1, Math.max(1, px * 0.07));
+    g.fillRect(x1, z + px * 0.16, x2 - x1, Math.max(1, px * 0.07));
+}
+/**
+ * The city's ground, painted once onto a canvas: asphalt with wear, lane lines and zebra crossings; pavements
+ * with kerbs; lots, lawns and yards per district; the landmarks' grounds; the quay. Water cells are left
+ * transparent, so the sea plane below shows through as the river and the pond.
+ */
 function paintGround() {
-    const px = 12, cv = document.createElement('canvas');
+    const px = GROUND_PX, cv = document.createElement('canvas'), r = seeded(99);
     cv.width = W * px;
     cv.height = SEA_Z * px;
     const g = cv.getContext('2d');
-    g.fillStyle = '#45494b';
+    const P = (v) => v * px;
+    const isWater = (i, j) => inside(i, j) && G.grid[idx(i, j)] === 4 /* Cell.Sea */;
+    // asphalt, with grain, repair patches, oil stains and cracks
+    g.fillStyle = '#43474a';
     g.fillRect(0, 0, cv.width, cv.height);
-    for (const b of G.blocks) {
-        const x = b.x0 * px, z = b.z0 * px, s = 6 * px;
-        g.fillStyle = '#8d8a80';
-        g.fillRect(x - 4, z - 4, s + 8, s + 8); // pavement
-        g.fillStyle = b.district === 'park' ? '#6f8a55' : b.district === 'base' ? '#8c8456' : b.district === 'industrial' || b.district === 'docks' ? '#6f6c64' : '#7b776c';
-        g.fillRect(x, z, s, s);
-        if (b.district === 'park') {
-            g.strokeStyle = '#b9ae8c';
-            g.lineWidth = 5;
-            g.beginPath();
-            g.moveTo(x, z + s / 2);
-            g.quadraticCurveTo(x + s / 2, z, x + s, z + s / 2);
-            g.moveTo(x + s / 2, z + s);
-            g.lineTo(x + s / 2, z + s * 0.3);
-            g.stroke();
-        }
-        if (b.district === 'base') {
-            g.strokeStyle = '#e4dfcf';
-            g.lineWidth = 3;
-            g.beginPath();
-            g.arc(x + s * 0.5, z + s * 0.62, px * 1.3, 0, Math.PI * 2);
-            g.stroke();
-            g.font = `bold ${px * 1.4}px sans-serif`;
-            g.fillStyle = '#e4dfcf';
-            g.textAlign = 'center';
-            g.textBaseline = 'middle';
-            g.fillText('H', x + s * 0.5, z + s * 0.62);
-        }
+    speckle(g, r, 0, 0, cv.width, P(QUAY_Z), ['rgba(255,255,255,.05)', 'rgba(0,0,0,.10)'], 26000, 2);
+    for (let k = 0; k < 220; k++) {
+        const i = Math.floor(r() * W), j = Math.floor(r() * QUAY_Z);
+        if (G.grid[idx(i, j)] !== 0 /* Cell.Road */ || G.blockAt[idx(i, j)] >= 0)
+            continue;
+        g.fillStyle = r() < 0.5 ? 'rgba(20,22,24,.28)' : 'rgba(120,120,115,.16)';
+        g.fillRect(P(i + r() * 0.5), P(j + r() * 0.5), P(0.3 + r() * 0.9), P(0.3 + r() * 0.9));
     }
-    // lane markings down the middle of each road
-    g.strokeStyle = 'rgba(230,220,180,.55)';
-    g.lineWidth = 1.5;
-    g.setLineDash([px * 0.6, px * 0.6]);
-    for (let k = 0; k <= W; k += 8) {
+    for (let k = 0; k < 260; k++) {
+        const i = Math.floor(r() * W), j = Math.floor(r() * QUAY_Z);
+        if (G.grid[idx(i, j)] !== 0 /* Cell.Road */)
+            continue;
+        g.fillStyle = 'rgba(15,15,15,.22)';
         g.beginPath();
-        g.moveTo((k + 1) * px, 0);
-        g.lineTo((k + 1) * px, QUAY_Z * px);
+        g.ellipse(P(i + 0.5 + (r() - 0.5) * 0.6), P(j + 0.5 + (r() - 0.5) * 0.6), P(0.1 + r() * 0.15), P(0.08 + r() * 0.12), r() * 3, 0, Math.PI * 2);
+        g.fill();
+    }
+    g.strokeStyle = 'rgba(18,18,18,.55)';
+    g.lineWidth = 1;
+    for (let k = 0; k < 140; k++) {
+        let x = r() * W, z = r() * QUAY_Z;
+        if (G.grid[cellOf(x, z)] !== 0 /* Cell.Road */)
+            continue;
+        g.beginPath();
+        g.moveTo(P(x), P(z));
+        for (let s = 0; s < 5; s++) {
+            x += (r() - 0.5) * 0.7;
+            z += (r() - 0.5) * 0.7;
+            g.lineTo(P(x), P(z));
+        }
         g.stroke();
     }
-    for (let k = 0; k <= QUAY_Z; k += 8) {
-        g.beginPath();
-        g.moveTo(0, (k + 1) * px);
-        g.lineTo(W * px, (k + 1) * px);
-        g.stroke();
-    }
+    // lane lines between the junctions, and zebra crossings on every approach
+    g.strokeStyle = 'rgba(232,222,180,.6)';
+    g.lineWidth = 2;
+    g.setLineDash([P(0.5), P(0.5)]);
+    for (let k = 0; k <= W - 2; k += 8)
+        for (let m = 0; m < 7; m++) {
+            g.beginPath();
+            g.moveTo(P(k + 1), P(m * 8 + 2.4));
+            g.lineTo(P(k + 1), P(m * 8 + 7.6));
+            g.stroke();
+        }
+    for (let m = 0; m <= QUAY_Z - 2; m += 8)
+        for (let k = 0; k < 9; k++) {
+            g.beginPath();
+            g.moveTo(P(k * 8 + 2.4), P(m + 1));
+            g.lineTo(P(k * 8 + 7.6), P(m + 1));
+            g.stroke();
+        }
     g.setLineDash([]);
-    g.fillStyle = '#9a958a';
-    g.fillRect(0, QUAY_Z * px, cv.width, (SEA_Z - QUAY_Z) * px); // the quay
+    g.fillStyle = 'rgba(228,224,210,.72)';
+    for (let k = 0; k <= W - 2; k += 8)
+        for (let m = 0; m <= QUAY_Z - 2; m += 8) {
+            for (const [di, dj] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+                const i = di < 0 ? k - 1 : di > 0 ? k + 2 : k, j = dj < 0 ? m - 1 : dj > 0 ? m + 2 : m;
+                if (!inside(i, j) || G.grid[idx(i, j)] !== 0 /* Cell.Road */ || isWater(i, j))
+                    continue;
+                for (let s = 0; s < 6; s++) {
+                    const o = 0.36 + s * 0.23;
+                    if (dj)
+                        g.fillRect(P(k + o), P(dj < 0 ? m - 0.8 : m + 2.12), P(0.12), P(0.68));
+                    else
+                        g.fillRect(P(di < 0 ? k - 0.8 : k + 2.12), P(m + o), P(0.68), P(0.12));
+                }
+            }
+        }
+    // pavements with kerbs round every block, then the block's own ground
+    for (const b of G.blocks) {
+        const x = P(b.x0), z = P(b.z0), w = P(b.w), d = P(b.d), e = P(0.32);
+        g.fillStyle = 'rgba(0,0,0,.35)';
+        g.fillRect(x - e - 1, z - e - 1, w + 2 * e + 2, d + 2 * e + 2);
+        g.fillStyle = '#8f8b80';
+        g.fillRect(x - e, z - e, w + 2 * e, d + 2 * e);
+        g.strokeStyle = 'rgba(60,55,45,.18)';
+        g.lineWidth = 1;
+        for (let t = x - e; t < x + w + e; t += P(0.5)) {
+            g.beginPath();
+            g.moveTo(t, z - e);
+            g.lineTo(t, z);
+            g.moveTo(t, z + d);
+            g.lineTo(t, z + d + e);
+            g.stroke();
+        }
+        for (let t = z - e; t < z + d + e; t += P(0.5)) {
+            g.beginPath();
+            g.moveTo(x - e, t);
+            g.lineTo(x, t);
+            g.moveTo(x + w, t);
+            g.lineTo(x + w + e, t);
+            g.stroke();
+        }
+        g.strokeStyle = '#bdb7a6';
+        g.lineWidth = 2;
+        g.strokeRect(x - e + 1, z - e + 1, w + 2 * e - 2, d + 2 * e - 2);
+        paintLot(g, r, b, x, z, w, d);
+    }
+    // the quay: concrete slabs, crane rails, a yellow edge line
+    for (let i = 0; i < W; i++)
+        for (let j = QUAY_Z; j < SEA_Z; j++) {
+            if (G.grid[idx(i, j)] !== 3 /* Cell.Quay */)
+                continue;
+            g.fillStyle = (i + j) % 2 ? '#8b867b' : '#858076';
+            g.fillRect(P(i), P(j), px, px);
+        }
+    speckle(g, r, 0, P(QUAY_Z), cv.width, P(SEA_Z - QUAY_Z), ['rgba(0,0,0,.08)', 'rgba(255,255,255,.07)'], 3000, 2);
+    g.strokeStyle = 'rgba(50,45,40,.3)';
+    g.lineWidth = 1;
+    for (let i = 0; i <= W; i += 2) {
+        g.beginPath();
+        g.moveTo(P(i), P(QUAY_Z));
+        g.lineTo(P(i), P(SEA_Z));
+        g.stroke();
+    }
+    for (const z of [60.35, 60.65, 63.15, 63.45]) {
+        g.fillStyle = '#5d5f60';
+        g.fillRect(0, P(z) - 1, cv.width, 2);
+    }
     g.fillStyle = '#c9b45a';
-    g.fillRect(0, (SEA_Z - 0.25) * px, cv.width, 3);
+    g.fillRect(0, P(SEA_Z - 0.2), cv.width, 3);
+    for (let i = 3; i < W; i += 4) {
+        g.fillStyle = 'rgba(30,30,30,.4)';
+        g.beginPath();
+        g.arc(P(i), P(SEA_Z - 0.35), 3, 0, Math.PI * 2);
+        g.fill();
+    }
+    // the bridges: a pavement along each side of the deck
+    for (const [a, b] of BRIDGES) {
+        g.fillStyle = '#8f8b80';
+        g.fillRect(P(RIVER_X0), P(a), P(RIVER_X1 + 1 - RIVER_X0), P(0.3));
+        g.fillRect(P(RIVER_X0), P(b + 0.7), P(RIVER_X1 + 1 - RIVER_X0), P(0.3));
+    }
+    // water: cut out, with a stone coping along its edge
+    for (let j = 0; j < SEA_Z; j++)
+        for (let i = 0; i < W; i++) {
+            if (!isWater(i, j))
+                continue;
+            g.clearRect(P(i), P(j), px, px);
+        }
+    g.fillStyle = '#b9b2a0';
+    for (let j = 0; j < SEA_Z; j++)
+        for (let i = 0; i < W; i++) {
+            if (!isWater(i, j))
+                continue;
+            if (inside(i - 1, j) && !isWater(i - 1, j))
+                g.fillRect(P(i) - 3, P(j), 3, px);
+            if (inside(i + 1, j) && !isWater(i + 1, j))
+                g.fillRect(P(i + 1), P(j), 3, px);
+            if (inside(i, j - 1) && !isWater(i, j - 1))
+                g.fillRect(P(i), P(j) - 3, px, 3);
+            if (j + 1 < SEA_Z && !isWater(i, j + 1))
+                g.fillRect(P(i), P(j + 1), px, 3);
+        }
     const tex = new THREE.CanvasTexture(cv);
     tex.anisotropy = 8;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(W, SEA_Z), new THREE.MeshStandardMaterial({ map: tex, roughness: 1 }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(W, SEA_Z), new THREE.MeshStandardMaterial({ map: tex, roughness: 1, alphaTest: 0.5 }));
     m.rotation.x = -Math.PI / 2;
     m.position.set(W / 2, 0, SEA_Z / 2);
     m.receiveShadow = true;
     return m;
 }
+/** A block's own ground: yards, gardens, plazas and the landmarks' grounds. x, z, w, d in pixels. */
+function paintLot(g, r, b, x, z, w, d) {
+    const px = GROUND_PX, P = (v) => v * px, cx = x + w / 2, cz = z + d / 2;
+    const path = (color, width, pts) => {
+        g.strokeStyle = color;
+        g.lineWidth = width;
+        g.lineCap = 'round';
+        g.beginPath();
+        pts.forEach(([a, c], k) => k ? g.lineTo(a, c) : g.moveTo(a, c));
+        g.stroke();
+        g.lineCap = 'butt';
+    };
+    switch (b.landmark) {
+        case 'victory':
+        case 'millbrook': {
+            grass(g, r, x, z, w, d);
+            path('#c2b593', 5, [[x, cz], [cx - P(0.6), z + P(1.2)], [cx + P(1), cz - P(0.4)], [x + w, cz]]);
+            path('#c2b593', 5, [[cx, z + d], [cx + P(0.3), cz + P(0.8)], [cx + P(1), cz - P(0.4)], [cx + P(0.8), z]]);
+            if (b.landmark === 'victory') {
+                g.fillStyle = '#c2b593';
+                g.beginPath();
+                g.arc(x + P(4.6), cz, P(0.75), 0, Math.PI * 2);
+                g.fill();
+            }
+            else {
+                g.fillStyle = '#c2b593';
+                g.beginPath();
+                g.arc(cx, cz, P(1.3), 0, Math.PI * 2);
+                g.fill();
+            }
+            return;
+        }
+        case 'base':
+            g.fillStyle = '#8c8456';
+            g.fillRect(x, z, w, d);
+            speckle(g, r, x, z, w, d, ['rgba(0,0,0,.08)', 'rgba(255,255,230,.08)'], 900, 3);
+            g.strokeStyle = '#e4dfcf';
+            g.lineWidth = 3;
+            g.beginPath();
+            g.arc(x + w * 0.5, z + d * 0.62, P(1.3), 0, Math.PI * 2);
+            g.stroke();
+            g.font = `bold ${P(1.4)}px sans-serif`;
+            g.fillStyle = '#e4dfcf';
+            g.textAlign = 'center';
+            g.textBaseline = 'middle';
+            g.fillText('H', x + w * 0.5, z + d * 0.62);
+            return;
+        case 'market': {
+            // cobbles in rings round the fountain
+            g.fillStyle = '#a3957b';
+            g.fillRect(x, z, w, d);
+            for (let k = 0; k < 2600; k++) {
+                g.fillStyle = ['#b3a487', '#978a72', '#a99b7f', '#8e826c'][k % 4];
+                g.fillRect(x + r() * w, z + r() * d, 4, 3);
+            }
+            g.strokeStyle = 'rgba(70,60,45,.35)';
+            g.lineWidth = 2;
+            for (const rr of [1.6, 2.3, 2.9]) {
+                g.beginPath();
+                g.arc(cx, cz, P(rr), 0, Math.PI * 2);
+                g.stroke();
+            }
+            return;
+        }
+        case 'cathedral':
+            grass(g, r, x, z, w, d, '#6f8a52');
+            g.fillStyle = '#b3ab96';
+            g.fillRect(x + P(0.1), z + P(1.2), P(5.9), P(3.6));
+            g.fillRect(x - P(0.3), cz - P(0.5), P(0.8), P(1.0));
+            return;
+        case 'station':
+            g.fillStyle = '#6d6660';
+            g.fillRect(x, z, w, d);
+            speckle(g, r, x, z, w, d, ['rgba(0,0,0,.15)', 'rgba(255,255,255,.08)'], 1400, 2);
+            g.fillStyle = '#a39e92';
+            for (const pz of [1.2, 3.0, 4.8])
+                g.fillRect(x, z + P(pz - 0.45), P(4.3), P(0.9));
+            for (const tz of [2.1, 3.9])
+                railTrack(g, 0, x + P(4.3), z + P(tz), px);
+            g.fillStyle = '#a39e92';
+            g.fillRect(x + P(4.3), z, w - P(4.3), d);
+            return;
+        case 'stadium': {
+            g.fillStyle = '#a39e92';
+            g.fillRect(x, z, w, d);
+            g.save();
+            g.beginPath();
+            g.ellipse(cx, cz, P(1.75), P(1.45), 0, 0, Math.PI * 2);
+            g.clip();
+            for (let k = 0; k < 8; k++) {
+                g.fillStyle = k % 2 ? '#5f8f45' : '#6a9a4e';
+                g.fillRect(cx - P(1.75) + k * P(3.5) / 8, z, P(3.5) / 8 + 1, d);
+            }
+            g.restore();
+            g.strokeStyle = 'rgba(240,240,230,.85)';
+            g.lineWidth = 1.5;
+            g.strokeRect(cx - P(1.3), cz - P(0.85), P(2.6), P(1.7));
+            g.beginPath();
+            g.moveTo(cx, cz - P(0.85));
+            g.lineTo(cx, cz + P(0.85));
+            g.stroke();
+            g.beginPath();
+            g.arc(cx, cz, P(0.3), 0, Math.PI * 2);
+            g.stroke();
+            return;
+        }
+        case 'townhall':
+            g.fillStyle = '#a19c90';
+            g.fillRect(x, z, w, d);
+            grass(g, r, x + P(1.9), z + P(4.5), P(2.2), P(1.4), '#6f8a52');
+            return;
+        case 'hospital':
+            g.fillStyle = '#b9b5aa';
+            g.fillRect(x, z, w, d);
+            g.strokeStyle = '#c4433a';
+            g.lineWidth = 2;
+            for (const zz of [z + P(0.15), z + d - P(1.0)])
+                g.strokeRect(cx - P(0.9), zz, P(1.8), P(0.85));
+            return;
+    }
+    switch (b.district) {
+        case 'downtown':
+            g.fillStyle = '#a19c90';
+            g.fillRect(x, z, w, d);
+            g.strokeStyle = 'rgba(60,55,45,.2)';
+            g.lineWidth = 1;
+            for (let t = 0; t <= w; t += P(1)) {
+                g.beginPath();
+                g.moveTo(x + t, z);
+                g.lineTo(x + t, z + d);
+                g.stroke();
+            }
+            for (let t = 0; t <= d; t += P(1)) {
+                g.beginPath();
+                g.moveTo(x, z + t);
+                g.lineTo(x + w, z + t);
+                g.stroke();
+            }
+            break;
+        case 'residential':
+            grass(g, r, x, z, w, d, '#6a7a50');
+            break;
+        case 'suburb':
+            grass(g, r, x, z, w, d, '#6c8650');
+            path('#4f6a3a', 3, [[cx, z], [cx, z + d]]);
+            path('#4f6a3a', 3, [[x, cz], [x + w, cz]]);
+            break;
+        case 'industrial':
+            g.fillStyle = '#77746b';
+            g.fillRect(x, z, w, d);
+            speckle(g, r, x, z, w, d, ['rgba(0,0,0,.18)', 'rgba(255,255,255,.06)'], 700, 4);
+            g.fillStyle = 'rgba(210,180,70,.55)';
+            for (let t = 0.3; t < 5.8; t += 0.7)
+                g.fillRect(x + P(t), z + d - P(0.9), 2, P(0.7));
+            break;
+        case 'docks':
+            g.fillStyle = '#7d7a72';
+            g.fillRect(x, z, w, d);
+            speckle(g, r, x, z, w, d, ['rgba(0,0,0,.15)', 'rgba(255,255,255,.06)'], 600, 4);
+            g.strokeStyle = 'rgba(210,180,70,.6)';
+            g.lineWidth = 2;
+            if (b.buildings.filter(bd => bd.kind === 'box').length > 6)
+                for (let row = 0; row < 2; row++)
+                    for (let col = 0; col < 4; col++)
+                        g.strokeRect(x + P(0.2 + col * 1.4), z + P(3.65 + row), P(1.4), P(0.7));
+            break;
+    }
+}
+/**
+ * The land beyond the map: suburban lawns near the city fading into a patchwork of fields, the city's streets
+ * carried on out of town, the railway west, the river north, and a strip of shore along the sea.
+ */
+function paintOutskirts() {
+    const px = OUT_PX, r = seeded(7), cv = document.createElement('canvas');
+    const WW = W + 2 * OUT, HH = SEA_Z + OUT;
+    cv.width = WW * px;
+    cv.height = HH * px;
+    const g = cv.getContext('2d');
+    const X = (x) => (x + OUT) * px, Z = (z) => (z + OUT) * px;
+    const fields = ['#6f7d4f', '#7d8752', '#8a8a5a', '#6a7548', '#93875a', '#5f6f45', '#77804c'];
+    for (let z = -OUT; z < SEA_Z; z += 7 + Math.floor(r() * 5)) {
+        for (let x = -OUT; x < W + OUT;) {
+            const w = 6 + Math.floor(r() * 10), h = 12;
+            g.fillStyle = fields[Math.floor(r() * fields.length)];
+            g.fillRect(X(x), Z(z), w * px, h * px);
+            g.strokeStyle = 'rgba(0,0,0,.08)';
+            g.lineWidth = 1;
+            const vert = r() < 0.5;
+            for (let t = 0; t < (vert ? w : h); t += 0.6) {
+                g.beginPath();
+                if (vert) {
+                    g.moveTo(X(x + t), Z(z));
+                    g.lineTo(X(x + t), Z(z + h));
+                }
+                else {
+                    g.moveTo(X(x), Z(z + t));
+                    g.lineTo(X(x + w), Z(z + t));
+                }
+                g.stroke();
+            }
+            g.strokeStyle = '#4c5e37';
+            g.lineWidth = 2;
+            g.strokeRect(X(x), Z(z), w * px, h * px);
+            x += w;
+        }
+    }
+    // suburban lawns close to town
+    for (let z = -OUT; z < SEA_Z; z++)
+        for (let x = -OUT; x < W + OUT; x++) {
+            const d = Math.max(-x, x - W, -z, 0);
+            if (d > 22 || r() > 1.1 - d / 22)
+                continue;
+            g.fillStyle = r() < 0.5 ? '#6c8650' : '#67804b';
+            g.fillRect(X(x), Z(z), px, px);
+        }
+    speckle(g, r, 0, 0, cv.width, cv.height, ['rgba(255,255,255,.05)', 'rgba(0,0,0,.07)'], 20000, 2);
+    // roads leading out of town
+    g.fillStyle = '#4a4d4e';
+    const len = (main) => (main ? OUT : 26);
+    for (let j = 0; j < QUAY_Z; j += 8) {
+        g.fillRect(X(-len(OUT_ROADS.west.includes(j))), Z(j), len(OUT_ROADS.west.includes(j)) * px, 2 * px);
+        g.fillRect(X(W), Z(j), len(OUT_ROADS.east.includes(j)) * px, 2 * px);
+    }
+    for (let i = 0; i < W; i += 8) {
+        if (isRiverCol(i))
+            continue;
+        g.fillRect(X(i), Z(-len(OUT_ROADS.north.includes(i))), 2 * px, len(OUT_ROADS.north.includes(i)) * px);
+    }
+    // the railway
+    g.fillStyle = '#6d6660';
+    g.fillRect(X(-OUT), Z(27.3), OUT * px, 3.4 * px);
+    for (const tz of [28.1, 29.9])
+        railTrack(g, X(-OUT), X(0), Z(tz), px);
+    // the shore
+    g.fillStyle = '#c9bb92';
+    g.fillRect(0, Z(SEA_Z - 1.4), cv.width, 1.4 * px);
+    g.fillStyle = '#8a8676';
+    g.fillRect(0, Z(SEA_Z - 0.4), cv.width, 0.4 * px);
+    // holes for the city itself and for the river
+    g.clearRect(X(0), Z(0), W * px, SEA_Z * px);
+    g.clearRect(X(RIVER_X0), Z(-OUT), (RIVER_X1 + 1 - RIVER_X0) * px, OUT * px);
+    g.fillStyle = '#b9b2a0';
+    g.fillRect(X(RIVER_X0) - 2, Z(-OUT), 2, OUT * px);
+    g.fillRect(X(RIVER_X1 + 1), Z(-OUT), 2, OUT * px);
+    const tex = new THREE.CanvasTexture(cv);
+    tex.anisotropy = 4;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(WW, HH), new THREE.MeshStandardMaterial({ map: tex, roughness: 1, alphaTest: 0.5 }));
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(W / 2, 0, (SEA_Z - OUT) / 2);
+    m.receiveShadow = true;
+    return m;
+}
+/** Collects static boxes and cylinders (walls, bridges, cranes, bollards) into two instanced meshes. */
+class Props {
+    constructor() {
+        this.boxes = [];
+        this.cyls = [];
+    }
+    box(x, y, z, sx, sy, sz, color, ry = 0) { this.boxes.push([x, y, z, sx, sy, sz, ry, color]); }
+    cyl(x, y, z, r, h, color) { this.cyls.push([x, y, z, r * 2, h, r * 2, 0, color]); }
+    build() {
+        const b = inst(UNIT_BOX, vmat(0xffffff), this.boxes.length), c = inst(new THREE.CylinderGeometry(0.5, 0.5, 1, 12).translate(0, 0.5, 0), vmat(0xffffff), this.cyls.length);
+        for (const [im, list] of [[b, this.boxes], [c, this.cyls]]) {
+            for (const [x, y, z, sx, sy, sz, ry, color] of list)
+                setInst(im, im.count++, x, y, z, sx, sy, sz, ry, 0, color);
+            im.instanceMatrix.needsUpdate = true;
+            if (im.instanceColor)
+                im.instanceColor.needsUpdate = true;
+        }
+    }
+}
+/** Embankment walls wherever water meets land, and stone arches on the bridges' faces. */
+function buildWaterEdges(p) {
+    const WALL = 0x6e6a60, DEPTH = 0.42, water = (i, j) => !inside(i, j) || G.grid[idx(i, j)] === 4 /* Cell.Sea */;
+    const bridgeFace = (i, j) => isRiverCol(i) && isBridgeRow(j);
+    for (let j = 0; j < H; j++)
+        for (let i = 0; i < W; i++) {
+            if (water(i, j))
+                continue;
+            const g = G.grid[idx(i, j)], open = g === 0 /* Cell.Road */ || g === 2 /* Cell.Park */;
+            // a low parapet where a street or path ends at the water; the quay edge is left open for the ships
+            const top = open ? 0.16 : 0.02;
+            for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                const ni = i + di, nj = j + dj;
+                if (!inside(ni, nj) || !water(ni, nj))
+                    continue;
+                if (dj && bridgeFace(i, j))
+                    continue;
+                if (dj)
+                    p.box(i + 0.5, -DEPTH, j + (dj > 0 ? 1 : 0), 1.04, DEPTH + top, 0.14, WALL);
+                else
+                    p.box(i + (di > 0 ? 1 : 0), -DEPTH, j + 0.5, 0.14, DEPTH + top, 1.04, WALL);
+            }
+        }
+    // the river carries on north out of the map between straight embankments
+    for (const x of [RIVER_X0, RIVER_X1 + 1])
+        p.box(x, -DEPTH, -OUT / 2, 0.14, DEPTH + 0.02, OUT, WALL);
+    // and the shore beyond the quay
+    p.box(-OUT / 2, -DEPTH, SEA_Z, OUT, DEPTH + 0.02, 0.14, WALL);
+    p.box(W + OUT / 2, -DEPTH, SEA_Z, OUT, DEPTH + 0.02, 0.14, WALL);
+    // bridge faces: a stone arch, the parapet above the deck
+    const span = RIVER_X1 + 1 - RIVER_X0, s = new THREE.Shape();
+    s.moveTo(0, -DEPTH);
+    s.lineTo(0, 0.3);
+    s.lineTo(span, 0.3);
+    s.lineTo(span, -DEPTH);
+    s.lineTo(span - 0.35, -DEPTH);
+    s.absellipse(span / 2, -DEPTH, span / 2 - 0.35, DEPTH - 0.1, 0, Math.PI, false, 0);
+    s.lineTo(0, -DEPTH);
+    const arch = new THREE.ExtrudeGeometry(s, { depth: 0.16, bevelEnabled: false });
+    const faces = new THREE.InstancedMesh(arch, vmat(0x8a8475), BRIDGES.length * 2);
+    faces.castShadow = true;
+    faces.receiveShadow = true;
+    let n = 0;
+    for (const [a, b] of BRIDGES)
+        for (const z of [a - 0.02, b + 1 - 0.14]) {
+            setInst(faces, n++, RIVER_X0, 0, z, 1, 1, 1);
+        }
+    faces.instanceMatrix.needsUpdate = true;
+    V.scene.add(faces);
+}
+/** Gantry cranes on the quay, bollards along its edge, and a lighthouse on the harbour mole. */
+function buildHarbour(p) {
+    CRANES.forEach((x, k) => {
+        const c = k % 2 ? 0xc4532f : 0xd8952e, steel = 0x3a3f42;
+        for (const dx of [-1.15, 1.15])
+            for (const z of [60.5, 63.3])
+                p.box(x + dx, 0, z, 0.2, 4.1, 0.2, c);
+        for (const z of [60.5, 63.3])
+            p.box(x, 3.9, z, 2.5, 0.25, 0.22, c);
+        for (const dx of [-1.15, 1.15])
+            p.box(x + dx, 1.4, 61.9, 0.12, 0.14, 2.8, c);
+        p.box(x, 4.15, 64.8, 0.5, 0.35, 12.5, c); // the boom, out over the water
+        p.box(x, 3.4, 61.2, 0.8, 0.6, 0.9, 0xe8e4d4); // the driver's cab
+        p.box(x, 4.5, 59.5, 0.9, 0.6, 1.0, steel); // counterweight
+        p.box(x, 4.5, 62.2, 0.12, 1.4, 0.12, c); // the A-frame and its stays
+        p.box(x, 2.6, 66, 0.06, 1.55, 0.06, steel); // the hoist and spreader
+        p.box(x, 2.45, 66, 0.9, 0.15, 0.45, 0xd8952e);
+    });
+    for (let i = 1; i < W; i += 2.5) {
+        if (isRiverCol(Math.floor(i)))
+            continue;
+        p.cyl(i, 0, SEA_Z - 0.3, 0.09, 0.18, 0x2b2b2b);
+    }
+    // the mole and the lighthouse at its end
+    p.box(W + 6 - 9, -0.42, 70.2, 18, 0.62, 1.6, 0x7e796f);
+    p.cyl(63.6, 0.2, 70.2, 0.55, 1.2, 0xeeeae0);
+    p.cyl(63.6, 1.4, 70.2, 0.48, 1.0, 0xc4432f);
+    p.cyl(63.6, 2.4, 70.2, 0.42, 1.0, 0xeeeae0);
+    p.cyl(63.6, 3.4, 70.2, 0.32, 0.45, 0x2b3438);
+    p.cyl(63.6, 3.85, 70.2, 0.38, 0.12, 0xc4432f);
+}
 function buildCity() {
+    var _a, _b, _c;
     V.scene.add(paintGround());
-    const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), vmat(0x4f6f78));
+    V.scene.add(paintOutskirts());
+    const seaMat = new THREE.MeshStandardMaterial({ color: 0x46666f, roughness: 0.35, metalness: 0.2 });
+    const sea = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), seaMat);
     sea.rotation.x = -Math.PI / 2;
     sea.position.set(W / 2, -0.35, H / 2);
     sea.receiveShadow = true;
     V.scene.add(sea);
-    const quayWall = new THREE.Mesh(UNIT_BOX, vmat(0x7e796f));
-    quayWall.scale.set(W, 0.35, 0.3);
-    quayWall.position.set(W / 2, -0.35, SEA_Z + 0.15);
-    V.scene.add(quayWall);
-    const all = G.blocks.flatMap(b => b.buildings.map(bd => ({ b, bd })));
-    const flats = all.filter(a => a.bd.kind !== 'house' && a.bd.kind !== 'tank');
-    const bodies = inst(UNIT_BOX, vmat(0xffffff), flats.length + all.filter(a => a.bd.kind === 'house').length);
-    const roofs = inst(UNIT_BOX, vmat(0xffffff), flats.length);
-    const gables = inst(GABLE, vmat(0xffffff), all.length);
-    const tanks = inst(new THREE.CylinderGeometry(0.5, 0.5, 1, 14).translate(0, 0.5, 0), vmat(0xffffff), all.length);
+    const props = new Props();
+    buildWaterEdges(props);
+    buildHarbour(props);
+    // buildings: every block's pieces, then the outskirts' houses (which are never recoloured)
+    const all = G.blocks.flatMap(b => b.buildings.map(bd => ({ b: b, bd }))).concat(outskirts.map(bd => ({ b: null, bd })));
+    const count = (f) => Math.max(1, all.filter(a => f(a.bd)).length);
+    const bodies = inst(UNIT_BOX, vmat(0xffffff), count(bd => bd.kind !== 'tank' && bd.kind !== 'chimney' && bd.kind !== 'spire' && bd.kind !== 'dome'));
+    const roofs = inst(UNIT_BOX, vmat(0xffffff), count(bd => bd.kind === 'flat' || bd.kind === 'tower'));
+    const gables = inst(GABLE, vmat(0xffffff), count(bd => bd.kind === 'house' || bd.kind === 'shed'));
+    const cyls = inst(new THREE.CylinderGeometry(0.5, 0.5, 1, 16).translate(0, 0.5, 0), vmat(0xffffff), count(bd => bd.kind === 'tank' || bd.kind === 'chimney'));
+    const cones = inst(new THREE.ConeGeometry(0.5, 1, 8).translate(0, 0.5, 0), vmat(0xffffff), count(bd => bd.kind === 'spire'));
+    const domes = inst(new THREE.SphereGeometry(0.5, 14, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 2, 1), vmat(0xffffff), count(bd => bd.kind === 'dome'));
     let bandN = 0;
-    for (const a of flats)
-        if (a.bd.h >= 2)
-            bandN += Math.floor(a.bd.h / 1.1);
+    for (const { bd } of all)
+        if ((bd.kind === 'flat' || bd.kind === 'tower') && bd.h >= 2)
+            bandN += Math.floor(bd.h / 1.1);
     const bands = inst(UNIT_BOX, vmat(0x2b3438), bandN, false);
-    const note = (b, im, k, color) => { if (!blockInst.has(b.id))
-        blockInst.set(b.id, []); blockInst.get(b.id).push({ im, k, color }); };
+    const note = (b, im, k, color) => {
+        if (!b)
+            return;
+        if (!blockInst.has(b.id))
+            blockInst.set(b.id, []);
+        blockInst.get(b.id).push({ im, k, color });
+    };
     for (const { b, bd } of all) {
-        if (bd.kind === 'tank') {
-            const k = tanks.count++;
-            setInst(tanks, k, bd.x, 0, bd.z, bd.w, bd.h, bd.d, 0, 0, bd.color);
-            note(b, tanks, k, bd.color);
+        const y = (_a = bd.y) !== null && _a !== void 0 ? _a : 0, ry = (_b = bd.ry) !== null && _b !== void 0 ? _b : 0;
+        if (bd.kind === 'tank' || bd.kind === 'chimney') {
+            const k = cyls.count++;
+            setInst(cyls, k, bd.x, y, bd.z, bd.w, bd.h, bd.d, ry, 0, bd.color);
+            note(b, cyls, k, bd.color);
+            continue;
+        }
+        if (bd.kind === 'spire' || bd.kind === 'dome') {
+            const im = bd.kind === 'spire' ? cones : domes, k = im.count++;
+            setInst(im, k, bd.x, y, bd.z, bd.w, bd.h, bd.d, ry, 0, bd.color);
+            note(b, im, k, bd.color);
             continue;
         }
         const k = bodies.count++;
-        setInst(bodies, k, bd.x, 0, bd.z, bd.w, bd.h, bd.d, 0, 0, bd.color);
+        setInst(bodies, k, bd.x, y, bd.z, bd.w, bd.h, bd.d, ry, 0, bd.color);
         note(b, bodies, k, bd.color);
-        if (bd.kind === 'house') {
-            const g = gables.count++;
-            setInst(gables, g, bd.x, bd.h, bd.z, bd.d * 1.1, 0.8, bd.w * 1.08, Math.PI / 2, 0, bd.roof);
+        if (bd.kind === 'house' || bd.kind === 'shed') {
+            // a pitched roof, its ridge along the longer side
+            const g = gables.count++, rh = (_c = bd.roofH) !== null && _c !== void 0 ? _c : (bd.kind === 'house' ? 0.75 : 0.5), alongX = bd.w >= bd.d;
+            setInst(gables, g, bd.x, y + bd.h, bd.z, (alongX ? bd.d : bd.w) * 1.08, rh, (alongX ? bd.w : bd.d) * 1.04, ry + (alongX ? Math.PI / 2 : 0), 0, bd.roof);
             note(b, gables, g, bd.roof);
         }
-        else {
+        else if (bd.kind === 'flat' || bd.kind === 'tower') {
             const r = roofs.count++;
-            setInst(roofs, r, bd.x, bd.h, bd.z, bd.w + 0.12, 0.14, bd.d + 0.12, 0, 0, bd.roof);
+            setInst(roofs, r, bd.x, y + bd.h, bd.z, bd.w + 0.12, 0.14, bd.d + 0.12, ry, 0, bd.roof);
             note(b, roofs, r, bd.roof);
             if (bd.h >= 2)
                 for (let f = 0; f < Math.floor(bd.h / 1.1); f++)
-                    setInst(bands, bands.count++, bd.x, 0.5 + f * 1.1, bd.z, bd.w + 0.04, 0.32, bd.d + 0.04);
+                    setInst(bands, bands.count++, bd.x, y + 0.5 + f * 1.1, bd.z, bd.w + 0.04, 0.32, bd.d + 0.04, ry);
         }
     }
-    for (const im of [bodies, roofs, gables, tanks, bands]) {
+    for (const im of [bodies, roofs, gables, cyls, cones, domes, bands]) {
         im.instanceMatrix.needsUpdate = true;
         if (im.instanceColor)
             im.instanceColor.needsUpdate = true;
     }
+    // trees: conifers and broadleaves
     const trunks = inst(new THREE.CylinderGeometry(0.08, 0.1, 1, 5).translate(0, 0.5, 0), vmat(0x6b5236), trees.length);
-    const crowns = inst(new THREE.ConeGeometry(0.5, 1, 6).translate(0, 0.5, 0), vmat(0x5f7a48), trees.length);
-    for (const [x, z, s] of trees) {
+    const firs = inst(new THREE.ConeGeometry(0.5, 1, 6).translate(0, 0.5, 0), vmat(0xffffff), trees.length);
+    const leafy = inst(new THREE.IcosahedronGeometry(0.5, 0).translate(0, 0.5, 0), vmat(0xffffff), trees.length);
+    for (const [x, z, s, kind] of trees) {
+        const shade = (Math.sin(x * 12.9 + z * 78.2) * 0.5 + 0.5);
         setInst(trunks, trunks.count++, x, 0, z, s, s * 0.5, s);
-        setInst(crowns, crowns.count++, x, s * 0.35, z, s * 1.1, s * 1.5, s * 1.1, x * 7);
+        if (kind === 0)
+            setInst(firs, firs.count++, x, s * 0.35, z, s * 1.1, s * 1.5, s * 1.1, x * 7, 0, shade < 0.5 ? 0x4f6b40 : 0x5f7a48);
+        else
+            setInst(leafy, leafy.count++, x, s * 0.4, z, s * 1.25, s * 1.1, s * 1.25, x * 7, 0, shade < 0.33 ? 0x6b8a4a : shade < 0.66 ? 0x5f7f45 : 0x7a8f50);
     }
-    // Fort Aldermoor: sandbags round the helipad and a flag
+    for (const im of [trunks, firs, leafy]) {
+        im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor)
+            im.instanceColor.needsUpdate = true;
+    }
+    // abandoned cars
+    const carBody = inst(UNIT_BOX, vmat(0xffffff), cars.length), carTop = inst(UNIT_BOX, vmat(0xffffff), cars.length);
+    for (const [x, z, hd, color] of cars) {
+        setInst(carBody, carBody.count++, x, 0.05, z, 0.68, 0.32, 1.45, hd, 0, color);
+        setInst(carTop, carTop.count++, x - Math.sin(hd) * 0.08, 0.37, z - Math.cos(hd) * 0.08, 0.6, 0.24, 0.78, hd, 0, color === 0x2b2725 ? 0x1e1c1b : 0x2f3a40);
+    }
+    for (const im of [carBody, carTop]) {
+        im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor)
+            im.instanceColor.needsUpdate = true;
+    }
+    // Fort Aldermoor: sandbags round the helipad
     const base = G.blocks.find(b => b.district === 'base');
-    for (let a = 0; a < Math.PI * 2; a += 0.35) {
-        const m = new THREE.Mesh(UNIT_BOX, vmat(0xbfa978));
-        m.scale.set(0.5, 0.3, 0.25);
-        m.position.set(base.x0 + 3 + Math.cos(a) * 2.3, 0, base.z0 + 3.7 + Math.sin(a) * 2.3);
-        m.rotation.y = -a;
-        m.castShadow = true;
-        V.scene.add(m);
-    }
+    for (let a = 0; a < Math.PI * 2; a += 0.35)
+        props.box(base.x0 + 3 + Math.cos(a) * 2.3, 0, base.z0 + 3.7 + Math.sin(a) * 2.3, 0.5, 0.3, 0.25, 0xbfa978, -a);
+    props.build();
 }
 function paintBlocks() {
     for (const b of G.blocks) {
@@ -1738,9 +2638,9 @@ function drawMarkers(sel, selBlock, place, time) {
     }
     blockMark.visible = !!selBlock;
     if (selBlock) {
-        const h = Math.max(1.5, ...selBlock.buildings.map(b => b.h)) + 0.3;
-        blockMark.position.set(selBlock.x0 + 3, 0, selBlock.z0 + 3);
-        blockMark.scale.set(6.4, h, 6.4);
+        const h = Math.max(1.5, ...selBlock.buildings.map(b => { var _a; return ((_a = b.y) !== null && _a !== void 0 ? _a : 0) + b.h; })) + 0.3;
+        blockMark.position.set(selBlock.x0 + selBlock.w / 2, 0, selBlock.z0 + selBlock.d / 2);
+        blockMark.scale.set(selBlock.w + 0.4, h, selBlock.d + 0.4);
     }
     ghost.visible = !!place;
     if (place) {
