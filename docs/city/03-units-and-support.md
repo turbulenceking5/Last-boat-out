@@ -20,6 +20,35 @@ Range and speed are in cells (a block is 6 cells across, a road 2). Every unit f
 
 Soldiers who die have a 50% chance of rising as infected.
 
+## Special abilities
+
+Every ground unit has one ability on a cooldown. Select units and press **F**, or use the ability button in the unit panel; F fires the ability of every selected unit at once. The button shows the seconds left, or "ready".
+
+| Unit | Ability | Cooldown | What it does |
+|---|---|---|---|
+| Militia | Molotovs | 30 s | Two petrol bombs on the thickest knot of infected within 6 cells: 3 damage within 1.6 cells each |
+| Infantry | Grenades | 20 s | Two grenades on the thickest knot within 8 cells: 4 damage within 1.9 cells each, which kills walkers and runners outright |
+| APC | Flare and siren | 45 s | For 12 seconds, every infected within about 26 cells comes for the APC instead of anyone else. Drive away and they follow; park it in front of your guns and they walk into them |
+| Tank | HE barrage | 40 s | Four shells on the thickest knot within 14 cells: 8 damage within 2.4 cells each |
+
+Thrown weapons and shells need at least 3 infected close together, land after half a second to a second, and never hurt civilians. If there's no target, the toast says so and the cooldown isn't spent.
+
+## Ranks
+
+Units earn ranks from their kills. Each rank adds 8 points of accuracy (up to 97%), fires 15% faster, and recharges the ability 15% sooner.
+
+| Rank | Kills | Shown as |
+|---|---|---|
+| Rookie | 0 | |
+| Veteran | 50 | ★ over the unit and in its panel |
+| Elite | 150 | ★★ |
+
+A promotion plays a short bugle call and shows over the unit. The panel says how many kills to the next rank. The end screen names the unit of the night: the one with the most kills.
+
+## Reinforcing and repairs
+
+Bring a unit to Fort Aldermoor (within 9 cells) or an evacuation point (within 6 cells, 8 at the harbour), out of contact (no infected within 5 cells), and press **R** or the Reinforce button. Fallen soldiers are replaced, the wounded patched up and vehicles repaired, and the unit keeps its rank. It costs 60% of the unit's price for what was lost: about $22 a soldier for infantry, $4.50 a point of a tank's armour. Militia are volunteers and can't be reinforced.
+
 ## Support
 
 | Support | Cost | What it does |

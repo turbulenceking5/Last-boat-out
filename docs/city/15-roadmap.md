@@ -9,13 +9,13 @@ Ideas for the City, roughly in order of how much they would add.
 - **Box selection** and control groups (Ctrl+1 to 9).
 - **Barricades and blown bridges**, as in the original: spend money to block a street, or drop one of the four bridges over the Calder.
 - **Night.** Darkness after a set time, with searchlights and flares, as in the original game.
-- **More missions:** escort a convoy, hold a block for a set time, rescue a VIP.
+- **More missions:** escort a bus convoy. (Holding a block and rescuing a VIP are in.)
 - **Scenarios and difficulty:** different outbreak sites, cities and harbour capacities.
 
 ## Feel
 
 - **Music** that rises with the infected count.
-- **Unit voices** as text barks: "Contact east!", "We're being overrun!"
+- **More decisions**, and decisions that depend on how the night is going. (Four fixed ones are in, as are unit barks.)
 - **A minimap.**
 
 ## Sharing and keeping

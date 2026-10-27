@@ -89,10 +89,10 @@ type Order = 'militia' | 'infantry' | 'apc' | 'tank' | 'strike' | 'gunship' | 'e
 const ORDER_COST: Record<Order, number> = { militia: 100, infantry: 300, apc: 700, tank: 1200, strike: 500, gunship: 1000, evac: 300 };
 
 /** Pop-up objectives: a supply crate to grab, or survivors to reach before the infected do. */
-interface Mission { id: number; kind: 'crate' | 'survivors'; x: number; z: number; t: number; people: number; reward: number; biteT: number }
+interface Mission { id: number; kind: 'crate' | 'survivors' | 'vip' | 'hold'; x: number; z: number; t: number; people: number; reward: number; biteT: number }
 
 /** Things the view and the sound play out: the simulation only records them. */
-type Sfx = 'shot' | 'mg' | 'cannon' | 'boom' | 'horn' | 'alarm' | 'chime' | 'crunch';
+type Sfx = 'shot' | 'mg' | 'cannon' | 'boom' | 'horn' | 'alarm' | 'chime' | 'crunch' | 'siren' | 'rank' | 'tick' | 'throw';
 
 interface Tracer { x1: number; z1: number; y1: number; x2: number; z2: number; t: number; color: number }
 interface Boom { x: number; z: number; t: number; size: number }
@@ -258,3 +258,65 @@ class Hash<T extends { x: number; z: number }> {
 }
 const zHash = new Hash<Zed>();
 const cHash = new Hash<Civ>();
+
+// ---- abilities, veterancy, decisions and feedback ----
+// Declared as interface merges so the original declarations above stay as they were.
+
+interface Unit {
+  ab: number;              // seconds until the special ability is ready again
+  lureT: number;           // APCs: seconds left on the flare and siren that draw the infected
+  rank: number;            // 0 rookie, 1 veteran, 2 elite: earned with kills
+  quietT: number;          // seconds since this unit last fired, for "Contact!" barks
+  barkT: number;           // no bark from this unit before this game time
+  vip: number;             // id of the VIP mission whose VIP rides with this unit, or 0
+}
+interface Mission {
+  prog: number;            // hold: seconds a unit has held the block so far
+  need: number;            // hold: seconds needed
+  block: number;           // hold: the block to defend, or -1
+  carrier: number;         // vip: id of the unit the VIP rides with, or 0 while still waiting
+  who: string;             // vip: who they are
+}
+interface Evac { extra: number }  // harbour: extra places on the coming sailings (the ferry decision)
+
+/** A thrown grenade or molotov, or a tank shell, in flight: it lands after dur seconds. */
+interface Shell { sx: number; sz: number; x: number; z: number; t: number; dur: number; r: number; dmg: number; unit: number; big: boolean }
+/** Floating text over the map: money, people saved, unit barks. The view fades it out. */
+interface Pop { x: number; z: number; text: string; kind: 'good' | 'bad' | 'key' | 'say' | 'money' }
+/** off: why this option can't be taken right now. */
+interface Choice { label: string; note: string; off?: string }
+/** A decision the player must make; the page pauses the game while it is shown. */
+interface Decision { id: string; title: string; text: string; opts: Choice[]; until: number }
+/** First orders from HQ: a short tutorial with small rewards. */
+interface HqOrder { id: 'bus' | 'evac' | 'east' | 'ability'; text: string; reward: number; done: boolean }
+
+interface Game {
+  shells: Shell[];
+  pops: Pop[];
+  decision: Decision | null;
+  decisions: Array<{ id: string; at: number }>;   // still to come, in order
+  hqOrders: HqOrder[];
+  sealed: boolean;          // the eastern bridges were blown
+  calmUntil: number;        // "stay indoors": blocks don't panic on their own before this
+  waveSize: number;
+  troopsHome: number;       // soldiers who boarded the last ship
+  ordered: boolean;         // the player has ordered a block to evacuate
+  usedAbility: boolean;
+  lastCall: number;         // last-ship countdown: the last second announced
+  hordeTarget: number;      // the cell the great horde marches on
+  ace: { name: string; kills: number; rank: number } | null;  // the unit with the most kills, for the end screen
+  deaths: { streets: number; queues: number; homes: number; fire: number }; // where people died (fire: your own), for the end screen
+  lateSaid: boolean;        // the rooftop survivors of the late game have been announced
+  vips: number;             // VIP missions so far, so the same person doesn't turn up twice running
+}
+
+/** One special ability per kind of unit, used with F or the button in the unit panel. */
+const ABILITY: Record<UnitKind, { name: string; cd: number; range: number; r: number; dmg: number; desc: string }> = {
+  militia:  { name: 'Molotovs', cd: 30, range: 6, r: 1.6, dmg: 3, desc: 'Two petrol bombs on the thickest knot of infected within 6 cells.' },
+  infantry: { name: 'Grenades', cd: 20, range: 8, r: 1.9, dmg: 4, desc: 'Two grenades on the thickest knot of infected within 8 cells. Civilians are never hurt.' },
+  apc:      { name: 'Flare and siren', cd: 45, range: 0, r: 0, dmg: 0, desc: 'For 12 seconds the infected within about 26 cells come for the APC instead of anyone else. Drive, and they follow.' },
+  tank:     { name: 'HE barrage', cd: 40, range: 14, r: 2.4, dmg: 8, desc: 'Four high-explosive shells on the thickest knot of infected within 14 cells.' },
+};
+/** Kills needed for each rank. Each rank is more accurate, fires faster and recharges its ability sooner. */
+const RANKS = [{ name: 'Rookie', kills: 0 }, { name: 'Veteran', kills: 50 }, { name: 'Elite', kills: 150 }];
+const LURE_SECONDS = 12, LURE_PULL = 8;

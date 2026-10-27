@@ -185,6 +185,16 @@ class Hash {
 }
 const zHash = new Hash();
 const cHash = new Hash();
+/** One special ability per kind of unit, used with F or the button in the unit panel. */
+const ABILITY = {
+    militia: { name: 'Molotovs', cd: 30, range: 6, r: 1.6, dmg: 3, desc: 'Two petrol bombs on the thickest knot of infected within 6 cells.' },
+    infantry: { name: 'Grenades', cd: 20, range: 8, r: 1.9, dmg: 4, desc: 'Two grenades on the thickest knot of infected within 8 cells. Civilians are never hurt.' },
+    apc: { name: 'Flare and siren', cd: 45, range: 0, r: 0, dmg: 0, desc: 'For 12 seconds the infected within about 26 cells come for the APC instead of anyone else. Drive, and they follow.' },
+    tank: { name: 'HE barrage', cd: 40, range: 14, r: 2.4, dmg: 8, desc: 'Four high-explosive shells on the thickest knot of infected within 14 cells.' },
+};
+/** Kills needed for each rank. Each rank is more accurate, fires faster and recharges its ability sooner. */
+const RANKS = [{ name: 'Rookie', kills: 0 }, { name: 'Veteran', kills: 50 }, { name: 'Elite', kills: 150 }];
+const LURE_SECONDS = 12, LURE_PULL = 8;
 
 // ---- citygen.ts ----
 // Builds the city: a 9 x 7 grid of blocks between 2-cell roads, split into districts, with the River Calder
@@ -705,9 +715,10 @@ const EMIT_EVERY = 2; // an evacuating block lets one figure's worth of people o
 const WAVE_AT = 8 * 60; // the great horde reaches the eastern edge
 const WAVE_SIZE = 220;
 const APC_CAP = 60;
+const LATE_AT = 6 * 60; // from here, hidden survivors signal from the rooftops more often
 const fieldCache = new Map();
 const doorField = new Float32Array(W * H);
-let panicSaid = 0, busSaid = 0, crowdSaid = 0; // routine messages are rationed so the log stays readable
+let panicSaid = 0, busSaid = 0, crowdSaid = 0, apcSaid = 0, dropSaid = 0; // routine messages are rationed so the log stays readable
 let zFieldT = 0, unitCount = { militia: 0, infantry: 0, apc: 0, tank: 0 };
 function newGame(seed) {
     const rnd = seeded(seed);
@@ -720,17 +731,23 @@ function newGame(seed) {
         stats: { evacuated: 0, dead: 0, killed: 0, unitsLost: 0, spent: 0, total: 0, missions: 0, ferried: 0 },
         over: null, log: [], nextId: 1, sparks: [150, 320, 500], zedSpeed: 1, changed: true,
         missions: [], nextMission: 55, waveAt: WAVE_AT, sfx: [], shake: 0, alert: null,
+        shells: [], pops: [], decision: null, decisions: DECISION_TIMES.map(d => ({ ...d })), hqOrders: HQ_ORDERS.map(o => ({ ...o, done: false })),
+        sealed: false, calmUntil: 0, waveSize: WAVE_SIZE, troopsHome: 0, ordered: false, usedAbility: false, lastCall: 0, hordeTarget: -1, ace: null, deaths: { streets: 0, queues: 0, homes: 0, fire: 0 }, lateSaid: false, vips: 0,
     };
     fieldCache.clear();
     zFieldT = 0;
     panicSaid = 0;
     busSaid = 0;
     crowdSaid = 0;
+    apcSaid = 0;
+    dropSaid = 0;
+    barkSaid = 0;
+    waveWarned = false;
     unitCount = { militia: 0, infantry: 0, apc: 0, tank: 0 };
     generateCity(seeded(20261027)); // the same streets every game; the outbreak and its timing vary
     G.stats.total = G.blocks.reduce((a, b) => a + b.popMax, 0);
     const hc = idx(37, 60);
-    G.evacs.push({ id: G.nextId++, kind: 'harbor', x: 37.5, z: 60.5, cell: hc, queue: 0, timer: 40, interval: 40, cap: 700, departed: 0, maxQueue: 4000, full: false, biteT: 0 });
+    G.evacs.push({ id: G.nextId++, kind: 'harbor', x: 37.5, z: 60.5, cell: hc, queue: 0, timer: 40, interval: 40, cap: 700, departed: 0, maxQueue: 4000, full: false, biteT: 0, extra: 0 });
     spawnUnit('infantry', G.hq, idx(13, 9));
     spawnUnit('infantry', G.hq, idx(9, 17));
     const hosp = G.blocks.find(b => b.district === 'hospital');
@@ -747,6 +764,7 @@ function outbreak(b, n) {
     const lost = Math.min(b.pop, n * PER_AGENT);
     b.pop -= lost;
     G.stats.dead += lost;
+    G.deaths.homes += lost;
     b.evacuating = true;
 }
 const SHIRTS = [0x6a4f45, 0x5b6470, 0x7a6a50, 0x4d5a4a, 0x8a3a30, 0x6b6b6b, 0x3f4f66];
@@ -780,6 +798,7 @@ function spawnUnit(kind, from, goal, name) {
     const u = {
         id: G.nextId++, kind, name: name !== null && name !== void 0 ? name : `${s.name} ${unitCount[kind]}`, x: ci(from) + 0.5, z: cj(from) + 0.5, hd: 0,
         members, goal: -1, field: null, aim: null, kills: 0, people: kind === 'militia' ? s.members * PER_AGENT : 0, cargo: 0, loadT: 0,
+        ab: 0, lureT: 0, rank: 0, quietT: 99, barkT: 0, vip: 0,
     };
     G.units.push(u);
     if (goal >= 0)
@@ -843,7 +862,7 @@ function order(kind, x, z, block) {
             return 'Evacuation points go on a street or the quay.';
         if (G.evacs.some(e => dist2(e.x, e.z, ci(c) + 0.5, cj(c) + 0.5) < 36))
             return 'Too close to another evacuation point.';
-        G.evacs.push({ id: G.nextId++, kind: 'bus', x: ci(c) + 0.5, z: cj(c) + 0.5, cell: c, queue: 0, timer: 10, interval: 10, cap: 70, departed: 0, maxQueue: 350, full: false, biteT: 0 });
+        G.evacs.push({ id: G.nextId++, kind: 'bus', x: ci(c) + 0.5, z: cj(c) + 0.5, cell: c, queue: 0, timer: 10, interval: 10, cap: 70, departed: 0, maxQueue: 350, full: false, biteT: 0, extra: 0 });
         G.eFieldDirty = true;
         say('Buses will run from the new evacuation point.', 'key');
     }
@@ -862,6 +881,7 @@ function evacuateBlock(b) {
     if (b.pop <= 0 || b.evacuating)
         return;
     b.evacuating = true;
+    G.ordered = true;
     say(`${b.name} is evacuating.`);
 }
 // ---- the step ----
@@ -895,6 +915,9 @@ function tick(dt) {
     }
     updateWave();
     updateMissions(dt);
+    updateDecisions();
+    updateHqOrders();
+    updateLastCall();
     G.shake = Math.max(0, G.shake - dt * 2);
     for (const b of G.blocks)
         updateBlock(b, dt);
@@ -907,6 +930,7 @@ function tick(dt) {
         updateStrike(s, dt);
     for (const g of G.gunships)
         updateGunship(g, dt);
+    updateShells(dt);
     const n = G.zeds.length;
     for (let k = 0; k < n; k++) {
         const z = G.zeds[k];
@@ -929,9 +953,22 @@ function tick(dt) {
             u.people -= lost;
             G.stats.dead += lost;
         }
+        if (before > u.members.length && u.members.length) {
+            const half = UNITS[u.kind].members / 2;
+            if (u.members.length <= half && before > half)
+                bark(u, "We're being overrun! Need support!", 'bad', true);
+            else
+                bark(u, 'Man down!', 'bad');
+        }
         if (before && !u.members.length) {
             G.stats.unitsLost++;
-            say(`${u.name} has been wiped out.`, 'bad');
+            say(`${u.name}${u.rank ? `, ${RANKS[u.rank].name.toLowerCase()}s with ${u.kills} kills,` : ''} has been wiped out.`, 'bad');
+            G.pops.push({ x: u.x, z: u.z, text: `${u.name} lost`, kind: 'bad' });
+            const vm = G.missions.find(m => m.kind === 'vip' && m.carrier === u.id);
+            if (vm) {
+                vm.t = -1;
+                say(`The VIP was with ${u.name}, and is lost.`, 'bad');
+            }
             if (u.cargo) {
                 G.stats.dead += u.cargo;
                 say(`${u.cargo} civilians aboard ${u.name} were lost with it.`, 'bad');
@@ -950,9 +987,11 @@ function tick(dt) {
     G.booms = G.booms.filter(b => b.t > 0);
     if (G.sfx.length > 300)
         G.sfx.splice(0, G.sfx.length - 300); // nobody is listening (tests)
+    if (G.pops.length > 60)
+        G.pops.splice(0, G.pops.length - 60);
     if (G.t >= GAME_SECONDS)
         finish('time');
-    else if (G.t > 5 && G.blocks.every(b => b.pop <= 0) && !G.civs.length && G.evacs.every(e => e.queue <= 0))
+    else if (G.t > 5 && G.blocks.every(b => b.pop <= 0) && !G.civs.length && G.evacs.every(e => e.queue <= 0) && !G.missions.some(m => m.people > 0) && !G.units.some(u => u.cargo > 0))
         finish('empty');
 }
 /** Beyond this the infected wander instead of hunting. */
@@ -973,7 +1012,7 @@ function rebuildZField() {
         if (e.queue > 0)
             src.push(e.cell);
     for (const m of G.missions)
-        if (m.kind === 'survivors')
+        if (m.kind === 'survivors' || (m.kind === 'vip' && !m.carrier))
             src.push(cellOf(m.x, m.z));
     for (const b of G.blocks)
         if (b.pop > 0)
@@ -983,6 +1022,13 @@ function rebuildZField() {
     distanceField(doorField, doors);
     for (let k = 0; k < W * H; k++)
         G.zField[k] = Math.min(G.zField[k], doorField[k] + DOOR_SCENT);
+    // an APC's flare and siren outshout everything else in a wide radius
+    const lures = G.units.filter(u => u.lureT > 0).map(u => cellOf(u.x, u.z));
+    if (lures.length) {
+        distanceField(doorField, lures);
+        for (let k = 0; k < W * H; k++)
+            G.zField[k] = Math.min(G.zField[k], doorField[k] - LURE_PULL);
+    }
 }
 function spark() {
     const cand = G.blocks.filter(b => b.pop > 200 && !b.fallen && b.bx + b.bz > 2);
@@ -995,7 +1041,7 @@ function spark() {
 function updateBlock(b, dt) {
     if (b.pop <= 0)
         return;
-    if (!b.evacuating && G.t - b.lastPanicCheck > 1) {
+    if (!b.evacuating && G.t - b.lastPanicCheck > 1 && G.t >= G.calmUntil) {
         b.lastPanicCheck = G.t;
         for (const d of b.doors) {
             if (zHash.nearest(ci(d) + 0.5, cj(d) + 0.5, 6, z => z.hp > 0)) {
@@ -1008,7 +1054,7 @@ function updateBlock(b, dt) {
             }
         }
     }
-    if (!b.evacuating || G.civs.length >= MAX_CIVS)
+    if (!b.evacuating || G.civs.length >= MAX_CIVS || (G.sealed && b.bx >= 7))
         return;
     b.emitT -= dt;
     if (b.emitT > 0)
@@ -1068,12 +1114,13 @@ function updateZed(z, dt) {
         if (v) {
             v.gone = true;
             G.stats.dead += PER_AGENT;
+            G.deaths.streets += PER_AGENT;
             spawnZed(v.x, v.z);
             z.cd = 0.9;
             return;
         }
         for (const ms of G.missions) {
-            if (ms.kind !== 'survivors' || ms.people <= 0 || dist2(ms.x, ms.z, z.x, z.z) > 1.4)
+            if ((ms.kind !== 'survivors' && (ms.kind !== 'vip' || ms.carrier > 0)) || ms.people <= 0 || dist2(ms.x, ms.z, z.x, z.z) > 1.4)
                 continue;
             z.cd = 0.9;
             if (G.t < ms.biteT)
@@ -1116,6 +1163,7 @@ function updateZed(z, dt) {
             blk.convertT = G.t + CONVERT_EVERY;
             blk.pop -= PER_AGENT;
             G.stats.dead += PER_AGENT;
+            G.deaths.homes += PER_AGENT;
             spawnZed(z.x + (G.rnd() - 0.5), z.z + (G.rnd() - 0.5));
             if (blk.pop <= 0 && !blk.fallen) {
                 blk.fallen = true;
@@ -1132,6 +1180,7 @@ function updateZed(z, dt) {
                 e.biteT = G.t + 0.8;
                 e.queue -= PER_AGENT;
                 G.stats.dead += PER_AGENT;
+                G.deaths.queues += PER_AGENT;
                 spawnZed(z.x, z.z);
                 if (G.t > crowdSaid) {
                     crowdSaid = G.t + 20;
@@ -1166,7 +1215,7 @@ function updateZed(z, dt) {
     }
     else if (z.march) {
         // the great horde pours along the streets toward the heart of the city
-        const next = downhill(fieldTo(CITY_HEART), z.x, z.z);
+        const next = downhill(fieldTo(G.hordeTarget >= 0 ? G.hordeTarget : CITY_HEART), z.x, z.z);
         if (next)
             stepToward(z, next[0] + Math.sin(z.ph) * 0.4, next[1] + Math.cos(z.ph) * 0.4, sp * 0.9);
         else
@@ -1188,9 +1237,21 @@ function hitZed(z, dmg, u) {
     if (z.hp <= 0) {
         G.stats.killed++;
         G.funds += 3;
-        if (u)
+        if (u) {
             u.kills++;
+            if (u.rank < RANKS.length - 1 && u.kills >= RANKS[u.rank + 1].kills)
+                promote(u);
+            if (!G.ace || u.kills > G.ace.kills)
+                G.ace = { name: u.name, kills: u.kills, rank: u.rank };
+        }
     }
+}
+function promote(u) {
+    u.rank++;
+    const r = RANKS[u.rank].name;
+    say(`${u.name} ${'★'.repeat(u.rank)} ${r.toLowerCase()} after ${u.kills} kills: sharper shooting, faster ${ABILITY[u.kind].name.toLowerCase()}.`, 'good');
+    G.pops.push({ x: u.x, z: u.z, text: `${'★'.repeat(u.rank)} ${r}`, kind: 'key' });
+    G.sfx.push({ k: 'rank', x: u.x, z: u.z });
 }
 function updateUnit(u, dt) {
     const s = UNITS[u.kind];
@@ -1211,6 +1272,17 @@ function updateUnit(u, dt) {
     }
     if (u.kind === 'apc' && u.goal < 0)
         apcCargo(u, dt);
+    u.ab = Math.max(0, u.ab - dt);
+    if (u.lureT > 0) {
+        u.lureT -= dt;
+        if (u.lureT <= 0)
+            zFieldT = 0;
+        else if (Math.floor(u.lureT / 1.5) !== Math.floor((u.lureT + dt) / 1.5))
+            G.sfx.push({ k: 'siren', x: u.x, z: u.z });
+    }
+    const quiet = u.quietT;
+    u.quietT += dt;
+    const acc = Math.min(0.97, s.acc + u.rank * 0.08), rof = s.rof * (1 - u.rank * 0.15);
     for (const m of u.members) {
         const tx = u.x + m.ox, tz = u.z + m.oz;
         const gx = walkableAt(tx, tz) ? tx : u.x, gz = walkableAt(tx, tz) ? tz : u.z;
@@ -1224,14 +1296,17 @@ function updateUnit(u, dt) {
             m.cd = 0.25;
             continue;
         }
-        m.cd = s.rof * (0.85 + G.rnd() * 0.3);
+        m.cd = rof * (0.85 + G.rnd() * 0.3);
         m.hd = Math.atan2(target.x - m.x, target.z - m.z);
         if (s.vehicle) {
             u.aim = { x: target.x, z: target.z };
             if (u.goal < 0)
                 u.hd = m.hd;
         }
-        const hit = G.rnd() < s.acc;
+        if (quiet > 15 && u.quietT > 0)
+            bark(u, contactLine(u, target), 'say');
+        u.quietT = 0;
+        const hit = G.rnd() < acc;
         const tx2 = hit ? target.x : target.x + (G.rnd() - 0.5) * 1.5, tz2 = hit ? target.z : target.z + (G.rnd() - 0.5) * 1.5;
         G.sfx.push({ k: u.kind === 'tank' ? 'cannon' : u.kind === 'apc' ? 'mg' : 'shot', x: m.x, z: m.z });
         G.tracers.push({ x1: m.x, z1: m.z, y1: s.vehicle ? 0.9 : 0.55, x2: tx2, z2: tz2, t: u.kind === 'tank' ? 0.25 : 0.08, color: u.kind === 'militia' ? 0xffd27a : 0xfff0b0 });
@@ -1255,6 +1330,7 @@ function updateStrike(s, dt) {
         cHash.near(x, z, 2.4, c => { if (!c.gone) {
             c.gone = true;
             G.stats.dead += PER_AGENT;
+            G.deaths.fire += PER_AGENT;
         } });
         for (const u of G.units)
             for (const m of u.members)
@@ -1269,6 +1345,7 @@ function updateStrike(s, dt) {
         if (lost > 0) {
             b.pop -= lost;
             G.stats.dead += lost;
+            G.deaths.fire += lost;
             say(`The air strike killed ${lost} people in ${b.name}.`, 'bad');
         }
     }
@@ -1300,15 +1377,18 @@ function updateEvac(e, dt) {
     if (e.timer > 0)
         return;
     e.timer = e.interval;
-    const take = Math.min(e.queue, e.cap);
+    const take = Math.min(e.queue, e.cap + e.extra);
     if (take <= 0)
         return;
+    const ferry = Math.max(0, take - e.cap);
+    e.extra -= ferry;
     e.queue -= take;
     e.departed++;
     G.stats.evacuated += take;
     G.funds += take * 0.6;
+    G.pops.push({ x: e.x, z: e.z, text: `+${take} saved`, kind: 'good' });
     if (e.kind === 'harbor') {
-        say(`A ship sails from the harbour with ${take} people aboard.`, 'good');
+        say(`A ship sails from the harbour with ${take} people aboard${ferry ? `, ${ferry} of them on the Marguerite` : ''}.`, 'good');
         G.sfx.push({ k: 'horn', x: e.x, z: e.z });
     }
     else if (G.t > busSaid) {
@@ -1321,13 +1401,26 @@ function finish(why) {
         return;
     // the last ship and the last buses take one more load each; militia leave with them
     for (const e of G.evacs) {
-        const take = Math.min(e.queue, e.cap);
+        const take = Math.min(e.queue, e.cap + e.extra);
         G.stats.evacuated += take;
         e.queue -= take;
     }
     for (const u of G.units)
         if (u.people > 0)
             G.stats.evacuated += u.people;
+    // troops who made it back to the quay sail with the last ship, and so do people aboard APCs there
+    const harbour = G.evacs[0];
+    for (const u of G.units) {
+        if (dist2(u.x, u.z, harbour.x, harbour.z) > 12 * 12)
+            continue;
+        if (u.kind !== 'militia')
+            G.troopsHome += UNITS[u.kind].vehicle ? 1 : u.members.length;
+        if (u.cargo) {
+            G.stats.evacuated += u.cargo;
+            G.stats.ferried += u.cargo;
+            u.cargo = 0;
+        }
+    }
     for (const m of G.missions)
         if (m.kind === 'survivors')
             G.stats.dead += m.people; // nobody reached them
@@ -1344,16 +1437,21 @@ function apcCargo(u, dt) {
     if (u.loadT > 0)
         return;
     u.loadT = 0.5;
-    if (u.cargo > 0) {
-        for (const e of G.evacs)
-            if (dist2(e.x, e.z, u.x, u.z) < 12) {
-                e.queue += u.cargo;
-                G.stats.ferried += u.cargo;
+    // beside an evacuation point, let people off; don't load there, since anyone close by can walk to it
+    const e = G.evacs.find(e => dist2(e.x, e.z, u.x, u.z) < 12);
+    if (e) {
+        if (u.cargo > 0) {
+            e.queue += u.cargo;
+            G.stats.ferried += u.cargo;
+            if (G.t > dropSaid) {
+                dropSaid = G.t + 15;
                 say(`${u.name} drops ${u.cargo} people at ${e.kind === 'harbor' ? 'the harbour' : 'the evacuation point'}.`, 'good');
-                G.sfx.push({ k: 'chime', x: u.x, z: u.z });
-                u.cargo = 0;
-                return;
             }
+            G.pops.push({ x: u.x, z: u.z, text: `${u.cargo} dropped off`, kind: 'good' });
+            G.sfx.push({ k: 'chime', x: u.x, z: u.z });
+            u.cargo = 0;
+        }
+        return;
     }
     if (u.cargo >= APC_CAP)
         return;
@@ -1368,8 +1466,13 @@ function apcCargo(u, dt) {
             const blk = G.blocks[b], take = Math.min(PER_AGENT, blk.pop, APC_CAP - u.cargo);
             blk.pop -= take;
             u.cargo += take;
-            if (u.cargo >= APC_CAP)
-                say(`${u.name} is full: ${u.cargo} people aboard. Drive them to an evacuation point.`, 'key');
+            if (u.cargo >= APC_CAP) {
+                G.pops.push({ x: u.x, z: u.z, text: 'Full: 60 aboard', kind: 'key' });
+                if (G.t > apcSaid) {
+                    apcSaid = G.t + 20;
+                    say(`${u.name} is full: ${u.cargo} people aboard. Drive them to an evacuation point.`, 'key');
+                }
+            }
             return;
         }
 }
@@ -1389,19 +1492,50 @@ function sendToBlock(units, b) {
     }
 }
 // ---- missions ----
+const VIPS = ["Dr Ilse Varga, St Brennan's chief epidemiologist", 'Harbourmaster Tom Reddin', 'Councillor Ada Moreland, who holds the ferry contracts', 'Professor Joel Hask, with samples of the infection'];
 function updateMissions(dt) {
     G.nextMission -= dt;
-    if (G.nextMission <= 0 && G.missions.length < 2 && G.t < GAME_SECONDS - 75) {
-        G.nextMission = 55 + G.rnd() * 25;
+    // late in the night, people who hid come out and signal from the rooftops: missions come thicker and faster
+    const late = G.t >= LATE_AT;
+    if (late && !G.lateSaid) {
+        G.lateSaid = true;
+        say('As the streets empty, people who hid are signalling from rooftops all over the city. Get them out before the last ship.', 'key');
+    }
+    if (G.nextMission <= 0 && G.missions.length < (late ? 3 : 2) && G.t < GAME_SECONDS - 75) {
+        G.nextMission = late ? 26 + G.rnd() * 14 : 55 + G.rnd() * 25;
         spawnMission();
     }
     for (const m of G.missions) {
         m.t -= dt;
+        if (m.kind === 'hold') {
+            updateHold(m, dt);
+            continue;
+        }
+        if (m.kind === 'vip' && m.carrier) {
+            updateVip(m);
+            continue;
+        }
         const u = G.units.find(u => u.members.some(mb => dist2(mb.x, mb.z, m.x, m.z) < 2.6));
         if (u && (m.kind === 'crate' || m.people > 0)) {
             if (m.kind === 'crate') {
                 G.funds += m.reward;
                 say(`${u.name} recovers the supply drop: $${m.reward}.`, 'good');
+                G.pops.push({ x: m.x, z: m.z, text: `+$${m.reward}`, kind: 'money' });
+            }
+            else if (m.kind === 'vip') {
+                // the VIP rides with the unit; the mission moves to the harbour, where they must be taken
+                const h = G.evacs[0];
+                m.carrier = u.id;
+                u.vip = m.id;
+                m.people = 0;
+                m.id = G.nextId++;
+                m.x = h.x;
+                m.z = h.z - 2.5;
+                m.t = 9999;
+                say(`${u.name} has ${m.who}. Bring them to the harbour or Fort Aldermoor.`, 'key');
+                bark(u, 'We have the VIP. Moving!', 'say', true);
+                G.sfx.push({ k: 'chime', x: u.x, z: u.z });
+                continue;
             }
             else {
                 let walk = m.people;
@@ -1414,6 +1548,7 @@ function updateMissions(dt) {
                     spawnCiv(m.x + (G.rnd() - 0.5) * 1.2, m.z + (G.rnd() - 0.5) * 1.2);
                 G.funds += m.reward;
                 say(`${u.name} reaches the survivors: ${m.people} people${walk < m.people ? ' climb aboard' : ' head for the evacuation points'}. $${m.reward}.`, 'good');
+                G.pops.push({ x: m.x, z: m.z, text: `${m.people} rescued · +$${m.reward}`, kind: 'good' });
                 m.people = 0;
             }
             G.sfx.push({ k: 'chime', x: m.x, z: m.z });
@@ -1422,8 +1557,8 @@ function updateMissions(dt) {
             m.kind = 'crate'; // done
             continue;
         }
-        if (m.kind === 'survivors' && m.people <= 0 && m.t > 0) {
-            say('The survivors were overrun before help arrived.', 'bad');
+        if ((m.kind === 'survivors' || m.kind === 'vip') && m.people <= 0 && m.t > 0) {
+            say(m.kind === 'vip' ? `The infected reached ${m.who} first.` : 'The survivors were overrun before help arrived.', 'bad');
             m.t = -1;
             m.kind = 'crate';
         }
@@ -1434,12 +1569,68 @@ function updateMissions(dt) {
                 G.stats.dead += m.people;
                 say(`No one reached the survivors in time. ${m.people} people are lost.`, 'bad');
             }
+            else if (m.kind === 'vip')
+                say(`No one reached ${m.who} in time.`, 'bad');
+            else if (m.kind === 'hold')
+                say(`No one held ${G.blocks[m.block].name}. Its residents are on their own.`, 'bad');
             else
                 say('The supply drop was lost to looters.');
         }
     G.missions = G.missions.filter(m => m.t > 0);
 }
+/** Hold: keep any unit beside the block until the clock fills; the residents arm themselves in thanks. */
+function updateHold(m, dt) {
+    const b = G.blocks[m.block];
+    if (b.pop <= 0) {
+        say(`${b.name} fell before it could be held.`, 'bad');
+        m.t = -1;
+        return;
+    }
+    m.people = b.pop;
+    if (!G.units.some(u => dist2(u.x, u.z, m.x, m.z) < 6.5 * 6.5))
+        return;
+    m.prog += dt;
+    if (m.prog < m.need)
+        return;
+    G.funds += m.reward;
+    G.stats.missions++;
+    b.breach = -BREACH; // barricaded: the doors hold twice as long
+    let extra = '';
+    if (b.pop >= 6 * PER_AGENT) {
+        const door = b.doors.reduce((a, d) => (G.zField[d] > G.zField[a] ? d : a), b.doors[0]);
+        b.pop -= 6 * PER_AGENT;
+        spawnUnit('militia', door, -1, `Militia, ${b.name}`);
+        extra = ' Sixty residents take up arms and join you.';
+    }
+    say(`${b.name} is held and barricaded. $${m.reward}.${extra}`, 'good');
+    G.pops.push({ x: m.x, z: m.z, text: `Held · +$${m.reward}`, kind: 'good' });
+    G.sfx.push({ k: 'chime', x: m.x, z: m.z });
+    m.t = -1;
+}
+/** VIP: once picked up, they ride with the unit until it reaches the harbour or the fort. */
+function updateVip(m) {
+    const u = G.units.find(x => x.id === m.carrier);
+    if (!u) {
+        m.t = -1;
+        return;
+    }
+    const h = G.evacs[0];
+    if (dist2(u.x, u.z, h.x, h.z) > 7 * 7 && dist2(u.x, u.z, ci(G.hq) + 0.5, cj(G.hq) + 0.5) > 8 * 8)
+        return;
+    h.extra += 400;
+    G.funds += m.reward;
+    G.stats.missions++;
+    u.vip = 0;
+    say(`${m.who} is safe. In return the navy adds 400 places to the coming sailings from the harbour. $${m.reward}.`, 'good');
+    G.pops.push({ x: u.x, z: u.z, text: `VIP safe · +$${m.reward}`, kind: 'good' });
+    G.sfx.push({ k: 'chime', x: u.x, z: u.z });
+    m.t = -1;
+}
 function spawnMission() {
+    const r = G.rnd(), late = G.t >= LATE_AT;
+    if (r < 0.15 && !late && spawnHold())
+        return;
+    const kind = r < 0.3 ? 'vip' : r < (late ? 0.8 : 0.68) ? 'survivors' : 'crate';
     // somewhere on the streets, away from the fort and the evacuation points
     for (let tries = 0; tries < 60; tries++) {
         const i = 3 + Math.floor(G.rnd() * (W - 6)), j = 3 + Math.floor(G.rnd() * (QUAY_Z - 6)), c = idx(i, j);
@@ -1448,25 +1639,401 @@ function spawnMission() {
         const x = i + 0.5, z = j + 0.5;
         if (dist2(x, z, ci(G.hq), cj(G.hq)) < 200 || G.evacs.some(e => dist2(e.x, e.z, x, z) < 64))
             continue;
-        const survivors = G.rnd() < 0.55;
         const near = G.blocks.reduce((a, b) => dist2(b.x0 + 3, b.z0 + 3, x, z) < dist2(a.x0 + 3, a.z0 + 3, x, z) ? b : a);
-        const m = { id: G.nextId++, kind: survivors ? 'survivors' : 'crate', x, z, t: survivors ? 75 : 60, people: survivors ? 60 + Math.floor(G.rnd() * 4) * 10 : 0, reward: survivors ? 400 : 700, biteT: 0 };
-        if (survivors)
+        const m = {
+            id: G.nextId++, kind, x, z, t: kind === 'crate' ? 60 : 75, people: kind === 'survivors' ? (late ? 80 : 60) + Math.floor(G.rnd() * (late ? 7 : 4)) * 10 : kind === 'vip' ? PER_AGENT : 0,
+            reward: kind === 'survivors' ? 400 : kind === 'vip' ? 800 : 700, biteT: 0, prog: 0, need: 0, block: -1, carrier: 0, who: '',
+        };
+        if (kind === 'survivors')
             G.stats.total += m.people; // people nobody knew were there
+        if (kind === 'vip')
+            m.who = VIPS[(G.seed + G.vips++) % VIPS.length];
         G.missions.push(m);
-        say(survivors ? `Survivors are signalling from a rooftop near ${near.name}: ${m.people} people. Get any unit to them in 75 seconds.` : `A supply drop has come down near ${near.name}. Get any unit to it in 60 seconds for $${m.reward}.`, 'key');
+        say(kind === 'survivors' ? `Survivors are signalling from a rooftop near ${near.name}: ${m.people} people. Get any unit to them in 75 seconds.`
+            : kind === 'vip' ? `${m.who} is trapped near ${near.name}. Reach them in 75 seconds, then bring them to the harbour or the fort.`
+                : `A supply drop has come down near ${near.name}. Get any unit to it in 60 seconds for $${m.reward}.`, 'key');
         G.sfx.push({ k: 'chime', x, z });
         return;
     }
 }
+/** A populated block with the infected closing in asks for troops to hold its streets. */
+function spawnHold() {
+    const cand = G.blocks.filter(b => b.pop >= 300 && !b.fallen && b.district !== 'hospital' && !(G.sealed && b.bx >= 7) &&
+        dist2(b.x0 + 3, b.z0 + 3, ci(G.hq), cj(G.hq)) > 200 && !G.missions.some(m => m.block === b.id) &&
+        zHash.nearest(b.x0 + 3, b.z0 + 3, 16, z => z.hp > 0 && z.rise <= 0));
+    if (!cand.length)
+        return false;
+    const b = cand[Math.floor(G.rnd() * cand.length)];
+    G.missions.push({ id: G.nextId++, kind: 'hold', x: b.x0 + 3, z: b.z0 + 3, t: 90, people: b.pop, reward: 400, biteT: 0, prog: 0, need: 30, block: b.id, carrier: 0, who: '' });
+    say(`${b.name} is barricading its doors as the infected close in: ${b.pop} people inside. Keep a unit beside it for 30 seconds in the next 90.`, 'key');
+    G.sfx.push({ k: 'chime', x: b.x0 + 3, z: b.z0 + 3 });
+    return true;
+}
+// ---- abilities ----
+/**
+ * The thickest knot of infected within range of (x, z) and at least minD away, with 3 or more inside radius r.
+ * Thrown weapons and shells never hurt civilians: the crews pick their moment.
+ */
+function clusterTarget(x, z, range, r, minD) {
+    const cands = [];
+    zHash.near(x, z, range, zd => { if (zd.hp > 0 && zd.rise <= 0 && dist2(zd.x, zd.z, x, z) >= minD * minD)
+        cands.push(zd); });
+    let best = null;
+    const stride = Math.max(1, Math.floor(cands.length / 40));
+    for (let k = 0; k < cands.length; k += stride) {
+        const c = cands[k];
+        let n = 0;
+        zHash.near(c.x, c.z, r, zd => { if (zd.hp > 0)
+            n++; });
+        if (n < 3 || (best && n <= best.n))
+            continue;
+        best = { x: c.x, z: c.z, n };
+    }
+    return best;
+}
+const THROW_LINES = {
+    militia: ['Burn them!', 'Light it up!'],
+    infantry: ['Frag out!', 'Grenades!', 'Fire in the hole!'],
+    apc: ['Flare up! Come and get it!', 'Siren on! Over here!'],
+    tank: ['Firing for effect!', 'HE, on the way!'],
+};
+/** Use a unit's special ability. Returns an error message, or null when it went off. */
+function useAbility(u) {
+    if (G.over)
+        return 'The campaign is over.';
+    const a = ABILITY[u.kind];
+    if (u.ab > 0)
+        return `${u.name}: ${a.name.toLowerCase()} ready in ${Math.ceil(u.ab)}s.`;
+    zHash.build(G.zeds); // called between steps: the hash may be stale
+    if (u.kind === 'apc') {
+        u.lureT = LURE_SECONDS;
+        zFieldT = 0;
+        G.sfx.push({ k: 'siren', x: u.x, z: u.z });
+    }
+    else {
+        const tank = u.kind === 'tank', tgt = clusterTarget(u.x, u.z, a.range, a.r, tank ? 3 : 2);
+        if (!tgt)
+            return `${u.name}: no target for ${a.name.toLowerCase()}: it needs 3 or more infected together within ${a.range} cells.`;
+        const n = tank ? 4 : 2, dur = tank ? 0.5 : 0.8;
+        for (let k = 0; k < n; k++) {
+            const jx = k ? (G.rnd() - 0.5) * a.r * 1.2 : 0, jz = k ? (G.rnd() - 0.5) * a.r * 1.2 : 0;
+            G.shells.push({ sx: u.x, sz: u.z, x: tgt.x + jx, z: tgt.z + jz, t: dur + k * (tank ? 0.45 : 0.3), dur, r: a.r, dmg: a.dmg, unit: u.id, big: tank });
+        }
+        G.sfx.push({ k: tank ? 'cannon' : 'throw', x: u.x, z: u.z });
+    }
+    const lines = THROW_LINES[u.kind];
+    bark(u, lines[(u.id + u.kills) % lines.length], 'say', true);
+    u.ab = a.cd * (1 - u.rank * 0.15);
+    G.usedAbility = true;
+    return null;
+}
+function updateShells(dt) {
+    var _a;
+    for (const s of G.shells) {
+        s.t -= dt;
+        if (s.t > 0)
+            continue;
+        const u = (_a = G.units.find(x => x.id === s.unit)) !== null && _a !== void 0 ? _a : null;
+        G.booms.push({ x: s.x, z: s.z, t: s.big ? 0.9 : 0.5, size: s.big ? 2.6 : 1.6 });
+        G.sfx.push({ k: 'boom', x: s.x, z: s.z });
+        zHash.near(s.x, s.z, s.r, zd => { hitZed(zd, s.dmg, u); });
+    }
+    G.shells = G.shells.filter(s => s.t > 0);
+}
+/** What it costs to bring a unit back to full strength: 60% of the price of what was lost. */
+function reinforceCost(u) {
+    const s = UNITS[u.kind];
+    if (u.kind === 'militia')
+        return 0;
+    const missing = s.members * s.hp - u.members.reduce((a, m) => a + Math.max(0, m.hp), 0);
+    return missing <= 0 ? 0 : Math.max(10, Math.ceil(missing * s.cost / (s.members * s.hp) * 0.6 / 5) * 5);
+}
+/** Units refit at Fort Aldermoor or beside an evacuation point. */
+function nearSupply(u) {
+    return dist2(u.x, u.z, ci(G.hq) + 0.5, cj(G.hq) + 0.5) < 9 * 9 || G.evacs.some(e => dist2(e.x, e.z, u.x, u.z) < (e.kind === 'harbor' ? 8 : 6) ** 2);
+}
+/** Refill a squad's ranks and patch up its wounded or its vehicle, keeping its rank. */
+function reinforce(u) {
+    if (G.over)
+        return 'The campaign is over.';
+    if (u.kind === 'militia')
+        return 'Militia are volunteers: there is no one to reinforce them with.';
+    const cost = reinforceCost(u);
+    if (!cost)
+        return `${u.name} is at full strength.`;
+    if (!nearSupply(u))
+        return `Bring ${u.name} to Fort Aldermoor or an evacuation point to reinforce.`;
+    zHash.build(G.zeds); // called between steps: the hashes may be from before the last clean-up, or another game
+    if (zHash.nearest(u.x, u.z, 5, z => z.hp > 0 && z.rise <= 0))
+        return `${u.name} is in contact. Pull back first.`;
+    if (G.funds < cost)
+        return `Needs $${cost}. You have $${Math.floor(G.funds)}.`;
+    const s = UNITS[u.kind];
+    for (const m of u.members)
+        m.hp = m.maxHp;
+    for (let k = u.members.length; k < s.members; k++) {
+        const a = (k / s.members) * Math.PI * 2, r = s.members > 1 ? s.spread * (k % 2 ? 1 : 0.6) : 0;
+        u.members.push({ hp: s.hp, maxHp: s.hp, ox: Math.cos(a) * r, oz: Math.sin(a) * r, cd: s.rof, x: u.x, z: u.z, hd: 0 });
+    }
+    G.funds -= cost;
+    G.stats.spent += cost;
+    say(`${u.name} ${s.vehicle ? 'repaired' : 'back to full strength'}: $${cost}.`);
+    G.pops.push({ x: u.x, z: u.z, text: s.vehicle ? 'Repaired' : 'Reinforced', kind: 'good' });
+    G.sfx.push({ k: 'chime', x: u.x, z: u.z });
+    return null;
+}
+// ---- barks: short lines from the units, over their heads and now and then in the log ----
+let barkSaid = 0;
+function bark(u, text, kind, loud = false) {
+    if (G.t < u.barkT && !loud)
+        return;
+    u.barkT = G.t + 12;
+    G.pops.push({ x: u.x, z: u.z, text, kind: kind === 'bad' ? 'bad' : 'say' });
+    if (loud && kind === 'say')
+        return; // abilities and pick-ups are already plain to see
+    if (G.t < barkSaid && kind !== 'bad')
+        return;
+    barkSaid = G.t + 10;
+    say(`${u.name}: “${text}”`, kind === 'bad' ? 'bad' : '');
+}
+const COMPASS = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'];
+function contactLine(u, z) {
+    const dir = COMPASS[(Math.round(Math.atan2(z.x - u.x, z.z - u.z) / (Math.PI / 4)) + 8) % 8];
+    const lines = UNITS[u.kind].vehicle ? [`Targets ${dir}, engaging!`, `Contact ${dir}!`] : [`Contact ${dir}!`, `Movement to the ${dir}!`, `Infected, ${dir} side!`, 'Here they come!'];
+    return lines[(u.id + u.kills) % lines.length];
+}
+// ---- first orders from HQ ----
+const HQ_ORDERS = [
+    { id: 'bus', text: 'Open a bus evacuation point near people (key 1)', reward: 150 },
+    { id: 'evac', text: 'Order a block to evacuate: tap it, then Evacuate', reward: 100 },
+    { id: 'east', text: "Send troops toward St Brennan's Hospital in the east", reward: 150 },
+    { id: 'ability', text: 'Select a squad and use its special ability (F)', reward: 100 },
+];
+const HOSPITAL_X = 61, HOSPITAL_Z = 21;
+function updateHqOrders() {
+    if (!G.hqOrders.length)
+        return;
+    if (G.t > 240) {
+        G.hqOrders = [];
+        return;
+    } // after four minutes you are on your own
+    for (const o of G.hqOrders) {
+        if (o.done)
+            continue;
+        const ok = o.id === 'bus' ? G.evacs.some(e => e.kind === 'bus') : o.id === 'evac' ? G.ordered : o.id === 'ability' ? G.usedAbility
+            : G.units.some(u => u.kind !== 'militia' && dist2(u.x, u.z, HOSPITAL_X, HOSPITAL_Z) < 15 * 15);
+        if (!ok)
+            continue;
+        o.done = true;
+        G.funds += o.reward;
+        say(`HQ: ${o.text.replace(/ \(.*\)$|:.*$/, '').toLowerCase()}: done. $${o.reward}.`, 'good');
+        G.sfx.push({ k: 'chime', x: V_CENTRE_X, z: V_CENTRE_Z });
+    }
+    if (G.hqOrders.every(o => o.done)) {
+        G.hqOrders = [];
+        say("HQ: good start. From here on, it's your call.", 'key');
+    }
+}
+const V_CENTRE_X = 37, V_CENTRE_Z = 30;
+// ---- decisions ----
+const DECISION_TIMES = [{ id: 'broadcast', at: 70 }, { id: 'volunteers', at: 200 }, { id: 'ferry', at: 290 }, { id: 'bridges', at: 400 }];
+function updateDecisions() {
+    if (G.decision) {
+        // the page pauses while a decision is open; only an unattended game (the tests) gets here
+        if (G.t >= G.decision.until) {
+            say(`No answer from command: ${G.decision.title.toLowerCase()} goes by.`);
+            G.decision = null;
+        }
+        return;
+    }
+    const next = G.decisions[0];
+    if (!next || G.t < next.at || G.over)
+        return;
+    G.decisions.shift();
+    G.decision = makeDecision(next.id);
+    if (G.decision)
+        G.sfx.push({ k: 'chime', x: V_CENTRE_X, z: V_CENTRE_Z });
+}
+/** The bridges over the River Calder go into the water: nothing crosses again. Anyone on them falls in. */
+function blowBridges() {
+    for (const [a, b] of BRIDGES)
+        for (let j = a; j <= b; j++)
+            for (let i = RIVER_X0; i <= RIVER_X1; i++)
+                G.grid[idx(i, j)] = 4 /* Cell.Sea */;
+    fieldCache.clear();
+    G.eFieldDirty = true;
+    zFieldT = 0;
+    for (const z of G.zeds)
+        if (!walkableAt(z.x, z.z))
+            z.hp = 0;
+    for (const c of G.civs)
+        if (!walkableAt(c.x, c.z)) {
+            c.gone = true;
+            G.stats.dead += PER_AGENT;
+        }
+    for (const u of G.units)
+        if (!walkableAt(u.x, u.z)) {
+            const c = nearestWalkable(u.x, u.z);
+            if (c >= 0) {
+                u.x = ci(c) + 0.5;
+                u.z = cj(c) + 0.5;
+                for (const m of u.members) {
+                    m.x = u.x;
+                    m.z = u.z;
+                }
+            }
+        }
+    for (const u of G.units)
+        if (u.goal >= 0) {
+            const g = u.goal;
+            u.goal = -1;
+            u.field = null;
+            sendUnit(u, g);
+        } // fresh routes; anyone whose goal is across the river stops
+    for (const [a, b] of BRIDGES)
+        for (let k = 0; k < 3; k++)
+            G.booms.push({ x: RIVER_X0 + 0.5 + k * 1.5, z: (a + b + 1) / 2, t: 0.9 + k * 0.1, size: 2.4 });
+}
+function eastPeople() { return G.blocks.filter(b => b.bx >= 7).reduce((a, b) => a + b.pop, 0); }
+function makeDecision(id) {
+    const until = G.t + 30;
+    switch (id) {
+        case 'broadcast': return {
+            id, until, title: 'Radio Calder', text: 'The city radio station is still on the air. The announcer asks what to tell people.', opts: [
+                { label: 'Stay indoors and bar the doors', note: 'For the next 2 minutes nobody panics: blocks only leave when you order them to. Quieter streets, but people sit tight even with the infected at the door.' },
+                { label: 'Make for the evacuation points', note: 'Every block within 20 cells of an evacuation point starts leaving now. Busy streets and crowded stops.' },
+            ]
+        };
+        case 'volunteers': return {
+            id, until, title: "The dockers' union", text: 'Two hundred dock workers have gathered at the harbour gates and want to help.', opts: [
+                { label: 'Arm them', note: 'Two militia companies form up on the quay, free. If they live, they sail on the last ship.' },
+                { label: 'Put them on the ships', note: '120 more people join the queue at the harbour.' },
+            ]
+        };
+        case 'ferry': {
+            const inf = G.units.some(u => u.kind === 'infantry');
+            return {
+                id, until, title: 'The Marguerite', text: 'A coastal ferry has put in at the harbour and can make one run alongside the next ships. Her captain wants $1,500 up front.', opts: [
+                    { label: 'Pay $1,500', note: '600 extra places on the coming sailings from the harbour.', off: G.funds < 1500 ? `You have $${Math.floor(G.funds)}.` : undefined },
+                    { label: 'Commandeer her', note: 'Free, but an infantry squad must go aboard to keep order: the squad nearest the harbour leaves the city.', off: inf ? undefined : 'You have no infantry.' },
+                    { label: 'Let her go', note: 'She sails empty.' },
+                ]
+            };
+        }
+        case 'bridges': return {
+            id, until, title: 'The river bridges', text: `Engineers have charges on the eastern bridges, and aircraft have seen a great horde on the far bank. ${fmtPeople(eastPeople())} people are still in the eastern blocks.`, opts: [
+                { label: 'Blow the bridges', note: 'The great horde arrives at half strength, but nobody still in the two eastern columns of blocks can get out.' },
+                { label: 'Mine the roads · $800', note: 'The great horde loses a third of its number on the way in.', off: G.funds < 800 ? `You have $${Math.floor(G.funds)}.` : undefined },
+                { label: 'Keep them open', note: 'The horde comes in full strength.' },
+            ]
+        };
+    }
+    return null;
+}
+/** Answer the open decision. Returns an error message, or null. */
+function choose(i) {
+    const d = G.decision;
+    if (!d)
+        return 'Nothing to decide.';
+    const o = d.opts[i];
+    if (!o)
+        return 'No such option.';
+    if (o.off)
+        return o.off;
+    G.decision = null;
+    switch (d.id + ':' + i) {
+        case 'broadcast:0':
+            G.calmUntil = G.t + 120;
+            say('Radio Calder: "Stay indoors. Bar your doors. Help is coming."', 'key');
+            break;
+        case 'broadcast:1': {
+            let n = 0;
+            for (const b of G.blocks)
+                if (b.pop > 0 && !b.evacuating && G.evacs.some(e => dist2(e.x, e.z, b.x0 + 3, b.z0 + 3) < 400)) {
+                    b.evacuating = true;
+                    n++;
+                }
+            say(`Radio Calder: "Make for the evacuation points." ${n} blocks are on the move.`, 'key');
+            break;
+        }
+        case 'volunteers:0': {
+            const h = G.evacs[0];
+            for (const dx of [-5, 5])
+                spawnUnit('militia', nearestWalkable(h.x + dx, h.z - 3), -1, `Dockers' militia ${dx < 0 ? 'A' : 'B'}`);
+            G.stats.total += 120;
+            say("The dockers are armed: two militia companies on the quay.", 'key');
+            break;
+        }
+        case 'volunteers:1':
+            G.evacs[0].queue += 120;
+            G.stats.total += 120;
+            say('The dockers join the queue for the ships.', 'key');
+            break;
+        case 'ferry:0':
+            G.funds -= 1500;
+            G.stats.spent += 1500;
+            G.evacs[0].extra += 600;
+            say('The Marguerite is paid and waiting: 600 more places from the harbour.', 'key');
+            break;
+        case 'ferry:1': {
+            const h = G.evacs[0], u = G.units.filter(u => u.kind === 'infantry').sort((a, b) => dist2(a.x, a.z, h.x, h.z) - dist2(b.x, b.z, h.x, h.z))[0];
+            G.units = G.units.filter(x => x !== u);
+            G.troopsHome += u.members.length;
+            G.evacs[0].extra += 600;
+            say(`${u.name} goes aboard the Marguerite: 600 more places from the harbour.`, 'key');
+            break;
+        }
+        case 'bridges:0':
+            G.sealed = true;
+            blowBridges();
+            G.waveSize = Math.round(WAVE_SIZE / 2);
+            {
+                const left = eastPeople();
+                say(left > 0 ? `The bridges are down. The east is cut off: ${fmtPeople(left)} people can no longer get out.` : 'The bridges are down. The east was already empty.', left > 0 ? 'bad' : 'key');
+            }
+            G.shake = 1;
+            G.sfx.push({ k: 'boom', x: 70, z: 25 });
+            break;
+        case 'bridges:1':
+            G.funds -= 800;
+            G.stats.spent += 800;
+            G.waveSize = Math.round(WAVE_SIZE * 2 / 3);
+            say('Engineers are mining the eastern roads.', 'key');
+            break;
+        default: say(`${d.title}: ${o.label.toLowerCase()}.`);
+    }
+    return null;
+}
+// ---- the last ship ----
+function updateLastCall() {
+    const left = GAME_SECONDS - G.t;
+    if (left <= 90 && G.lastCall === 0) {
+        G.lastCall = 90;
+        G.alert = { text: 'The last ship sails in 90 seconds. Fall back to the harbour!', until: G.t + 6 };
+        say('The last ship is in. Troops on the quay when she sails come home with her, and so do people aboard APCs there.', 'key');
+        G.sfx.push({ k: 'horn', x: G.evacs[0].x, z: G.evacs[0].z });
+    }
+    else if (left <= 30 && G.lastCall === 90) {
+        G.lastCall = 30;
+        G.alert = { text: 'Last ship: 30 seconds', until: G.t + 3 };
+        G.sfx.push({ k: 'horn', x: G.evacs[0].x, z: G.evacs[0].z });
+    }
+    else if (left <= 10 && left > 0 && Math.ceil(left) < G.lastCall) {
+        G.lastCall = Math.ceil(left);
+        G.alert = { text: `Last ship: ${G.lastCall}`, until: G.t + 1.05 };
+        G.sfx.push({ k: 'tick', x: G.evacs[0].x, z: G.evacs[0].z });
+    }
+}
 // ---- the great horde ----
 const CITY_HEART = idx(37, 30);
+let waveWarned = false;
 function updateWave() {
     if (G.waveAt < 0)
         return;
-    if (G.t >= G.waveAt - 30 && !G.alert) {
+    if (G.t >= G.waveAt - 30 && !waveWarned) {
+        waveWarned = true;
         G.alert = { text: 'A great horde is coming in from the east. 30 seconds.', until: G.t + 8 };
-        say('Aircraft report a great horde crossing the river to the east. It will reach the city in 30 seconds.', 'bad');
+        say(`Aircraft report a great horde on the eastern roads${G.sealed ? ', on the far side of the blown bridges' : ''}. It will reach the city in 30 seconds.`, 'bad');
         G.sfx.push({ k: 'alarm', x: 70, z: 30 });
     }
     if (G.t < G.waveAt)
@@ -1477,14 +2044,18 @@ function updateWave() {
         for (const i of [W - 2, W - 1])
             if (walkable(idx(i, j)))
                 roads.push(idx(i, j));
-    for (let k = 0; k < WAVE_SIZE; k++) {
+    for (let k = 0; k < G.waveSize; k++) {
         const c = roads[Math.floor(G.rnd() * roads.length)], r = G.rnd();
         const zd = spawnZed(ci(c) + G.rnd(), cj(c) + G.rnd(), false, r < 0.06 ? 2 /* ZedKind.Brute */ : r < 0.3 ? 1 /* ZedKind.Runner */ : 0 /* ZedKind.Walker */);
         if (zd)
             zd.march = true;
     }
-    G.alert = { text: 'The horde is in the city.', until: G.t + 5 };
-    say(`The great horde is in the city: about ${WAVE_SIZE * PER_AGENT} infected pouring in from the east.`, 'bad');
+    // it makes for the biggest crowd in the city, or failing that the heart of it
+    const crowd = G.evacs.reduce((a, e) => (e.queue > a.queue ? e : a), G.evacs[0]);
+    G.hordeTarget = crowd.queue >= 300 ? crowd.cell : CITY_HEART;
+    const where = crowd.queue < 300 ? 'the heart of the city' : crowd.kind === 'harbor' ? `the ${fmtPeople(crowd.queue)} people waiting at the harbour` : `the ${fmtPeople(crowd.queue)} people at a bus stop`;
+    G.alert = { text: `The horde is in the city, heading for ${crowd.queue < 300 ? 'the centre' : crowd.kind === 'harbor' ? 'the harbour' : 'a bus stop'}.`, until: G.t + 5 };
+    say(`The great horde is in the city: about ${G.waveSize * PER_AGENT} infected pouring in from the east, making for ${where}.`, 'bad');
 }
 
 // ---- view.ts ----
@@ -3194,11 +3765,48 @@ function resizeView() {
     V.camera.aspect = w / Math.max(1, h);
     V.camera.updateProjectionMatrix();
 }
+// the blown bridges: the deck's middle gone, broken ends sagging into the river, rubble in the water
+let blown = null;
+function drawBlownBridges() {
+    if (G.sealed === !!blown)
+        return;
+    if (blown) {
+        V.scene.remove(blown);
+        blown = null;
+        return;
+    } // a new game
+    blown = new THREE.Group();
+    for (const [a, b] of BRIDGES) {
+        const z = (a + b + 1) / 2, d = b - a + 1;
+        const gap = new THREE.Mesh(UNIT_BOX, vmat(0x4f6f78));
+        gap.scale.set(RIVER_X1 - RIVER_X0 - 0.6, 0.08, d + 0.4);
+        gap.position.set((RIVER_X0 + RIVER_X1 + 1) / 2, -0.02, z);
+        blown.add(gap);
+        for (const side of [-1, 1]) {
+            const end = new THREE.Mesh(UNIT_BOX, vmat(0x6f6a60));
+            end.scale.set(0.9, 0.18, d * 0.9);
+            end.castShadow = true;
+            end.position.set((RIVER_X0 + RIVER_X1 + 1) / 2 + side * 1.65, -0.18, z);
+            end.rotation.z = side * 0.35;
+            blown.add(end);
+        }
+        for (let k = 0; k < 7; k++) {
+            const r = new THREE.Mesh(UNIT_BOX, vmat(k % 2 ? 0x8a8475 : 0x5a564e));
+            const s = 0.25 + ((k * 37) % 10) / 25;
+            r.scale.set(s, s * 0.6, s);
+            r.position.set(RIVER_X0 + 0.8 + ((k * 53) % 30) / 10, -0.3, a + ((k * 29) % (d * 10)) / 10 + 0.2);
+            r.rotation.y = k;
+            blown.add(r);
+        }
+    }
+    V.scene.add(blown);
+}
 function drawFrame(time, dt, sel, selBlock, place) {
     if (G.changed) {
         paintBlocks();
         G.changed = false;
     }
+    drawBlownBridges();
     drawPeople(time);
     drawVehicles(time);
     drawBeacons(time);
@@ -3207,6 +3815,7 @@ function drawFrame(time, dt, sel, selBlock, place) {
     drawSmoke(time);
     drawMarkers(sel, selBlock, place, time);
     placeCamera();
+    drawFx(time); // fx.ts: ability effects, floating text, rank stars
     V.renderer.render(V.scene, V.camera);
 }
 
@@ -3290,7 +3899,7 @@ function tone(vol, type, f0, f1, attack, decay, lowpass = 4000, delay = 0) {
     o.start(t);
     o.stop(t + attack + decay + 0.05);
 }
-const GAP = { shot: 0.045, mg: 0.06, cannon: 0.25, boom: 0.08, horn: 2, alarm: 3, chime: 0.3, crunch: 0.2 };
+const GAP = { shot: 0.045, mg: 0.06, cannon: 0.25, boom: 0.08, horn: 2, alarm: 3, chime: 0.3, crunch: 0.2, siren: 1.2, rank: 0.5, tick: 0.5, throw: 0.15 };
 const SOUND = {
     shot: v => noiseBurst(0.35 * v, 1700 + Math.random() * 600, 1.2, 0.002, 0.07),
     mg: v => noiseBurst(0.25 * v, 1100, 1.5, 0.002, 0.05),
@@ -3304,6 +3913,14 @@ const SOUND = {
     } },
     chime: () => { tone(0.18, 'sine', 660, 660, 0.01, 0.35); tone(0.15, 'sine', 990, 990, 0.01, 0.5, 4000, 0.12); },
     crunch: v => noiseBurst(0.45 * v, 300, 2, 0.003, 0.18, 'bandpass', 120),
+    // an APC's siren: a rising and falling wail
+    siren: v => { const a = 0.12 * Math.max(v, 0.3); tone(a, 'sawtooth', 600, 1150, 0.02, 0.6, 2200); tone(a, 'sawtooth', 1150, 600, 0.02, 0.55, 2200, 0.62); },
+    // promotion: a short bugle-like rising triad
+    rank: () => { tone(0.14, 'triangle', 523, 523, 0.01, 0.16); tone(0.14, 'triangle', 659, 659, 0.01, 0.16, 4000, 0.13); tone(0.16, 'triangle', 784, 784, 0.01, 0.4, 4000, 0.26); },
+    // the last ship's countdown
+    tick: () => tone(0.16, 'square', 1320, 1320, 0.003, 0.06, 3000),
+    // a grenade or bottle leaving a hand: a short whoosh
+    throw: v => noiseBurst(0.18 * v, 2500, 0.8, 0.02, 0.18, 'bandpass', 900),
 };
 /** Play whatever the simulation recorded since the last frame. */
 function playSfx(dt) {
@@ -3316,7 +3933,7 @@ function playSfx(dt) {
     // keep only the nearest event of each kind this frame
     const best = {};
     for (const e of events) {
-        const d = Math.hypot(e.x - cam.x, e.z - cam.z), v = e.k === 'alarm' || e.k === 'horn' || e.k === 'chime' ? 1 : clamp(1 - d / reach, 0, 1) * clamp(40 / cam.dist, 0.35, 1);
+        const d = Math.hypot(e.x - cam.x, e.z - cam.z), v = e.k === 'alarm' || e.k === 'horn' || e.k === 'chime' || e.k === 'rank' || e.k === 'tick' ? 1 : clamp(1 - d / reach, 0, 1) * clamp(40 / cam.dist, 0.35, 1);
         if (v > ((_a = best[e.k]) !== null && _a !== void 0 ? _a : 0))
             best[e.k] = v;
     }
@@ -3341,6 +3958,160 @@ function playSfx(dt) {
     }
 }
 
+// ---- fx.ts ----
+// Effects for abilities, ranks and feedback, kept apart from view.ts: floating text over the map
+// (money, people saved, unit barks), rank stars over veteran units, grenades and shells in flight,
+// the flare over an APC using its siren, and a ring round a block being held. drawFx() runs once a
+// frame, after the camera is placed. The simulation records what to show (G.pops, G.shells,
+// Unit.lureT, G.missions); this file only draws it.
+const FX = {
+    game: null, // a new game clears everything
+    layer: null,
+    pops: [],
+    tags: new Map(),
+    shells: [],
+    flares: [],
+    lureRings: [],
+    holdRings: [],
+    v: new THREE.Vector3(),
+};
+const POP_LIFE = { good: 2.4, bad: 2.6, key: 2.8, say: 2.6, money: 2.2 };
+/** Screen position of a world point, or null when it is behind the camera or off screen. */
+function fxProject(x, y, z) {
+    const el = V.renderer.domElement, w = el.clientWidth, h = el.clientHeight;
+    FX.v.set(x, y, z).project(V.camera);
+    if (FX.v.z > 1 || FX.v.x < -1.1 || FX.v.x > 1.1 || FX.v.y < -1.1 || FX.v.y > 1.1)
+        return null;
+    return [(FX.v.x + 1) / 2 * w, (1 - FX.v.y) / 2 * h];
+}
+function fxPlace(el, p) {
+    if (!p) {
+        el.style.visibility = 'hidden';
+        return;
+    }
+    el.style.visibility = '';
+    el.style.transform = `translate(${p[0].toFixed(1)}px, ${p[1].toFixed(1)}px) translate(-50%, -100%)`;
+}
+function fxRing(color) {
+    const r = new THREE.Mesh(new THREE.TorusGeometry(1, 0.08, 4, 48).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color, transparent: true, depthWrite: false }));
+    V.scene.add(r);
+    return r;
+}
+function drawFx(time) {
+    if (!FX.layer) {
+        FX.layer = document.getElementById('fx');
+        if (!FX.layer)
+            return;
+    }
+    if (FX.game !== G) {
+        FX.game = G;
+        for (const p of FX.pops)
+            p.el.remove();
+        FX.pops.length = 0;
+        for (const el of FX.tags.values())
+            el.remove();
+        FX.tags.clear();
+    }
+    const now = performance.now() / 1000;
+    // floating text: a handful at once, rising and fading
+    for (const p of G.pops) {
+        const el = document.createElement('div');
+        el.className = `pop ${p.kind}`;
+        el.textContent = p.kind === 'say' ? `“${p.text}”` : p.text;
+        FX.layer.appendChild(el);
+        FX.pops.push({ el, x: p.x, z: p.z, born: now, life: POP_LIFE[p.kind] });
+    }
+    G.pops.length = 0;
+    while (FX.pops.length > 18)
+        FX.pops.shift().el.remove();
+    for (let k = FX.pops.length - 1; k >= 0; k--) {
+        const p = FX.pops[k], age = now - p.born;
+        if (age > p.life) {
+            p.el.remove();
+            FX.pops.splice(k, 1);
+            continue;
+        }
+        fxPlace(p.el, fxProject(p.x, 2.2 + age * 0.9, p.z));
+        p.el.style.opacity = String(Math.min(1, (1 - age / p.life) * 2.2));
+    }
+    // rank stars over veteran units
+    const live = new Set();
+    for (const u of G.units) {
+        if (!u.rank)
+            continue;
+        live.add(u.id);
+        let el = FX.tags.get(u.id);
+        if (!el) {
+            el = document.createElement('div');
+            el.className = 'tag-rank';
+            FX.layer.appendChild(el);
+            FX.tags.set(u.id, el);
+        }
+        const t = '★'.repeat(u.rank);
+        if (el.textContent !== t) {
+            el.textContent = t;
+            el.classList.toggle('elite', u.rank > 1);
+        }
+        fxPlace(el, fxProject(u.x, UNITS[u.kind].vehicle ? 1.9 : 1.5, u.z));
+    }
+    for (const [id, el] of FX.tags)
+        if (!live.has(id)) {
+            el.remove();
+            FX.tags.delete(id);
+        }
+    // grenades, molotovs and shells in flight, on an arc
+    while (FX.shells.length < G.shells.length) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 4), new THREE.MeshBasicMaterial({ color: 0x2c3326 }));
+        V.scene.add(m);
+        FX.shells.push(m);
+    }
+    FX.shells.forEach((m, k) => {
+        const s = G.shells[k], p = s ? 1 - s.t / s.dur : -1;
+        m.visible = p >= 0 && p <= 1;
+        if (!m.visible)
+            return;
+        m.position.set(s.sx + (s.x - s.sx) * p, 0.7 + Math.sin(p * Math.PI) * (s.big ? 1.6 : 2.6), s.sz + (s.z - s.sz) * p);
+        m.scale.setScalar(s.big ? 1.3 : 1);
+        m.material.color.setHex(s.big ? 0xffd27a : s.dmg < 4 ? 0xff8a3a : 0x2c3326);
+    });
+    // an APC's flare: a red light pulsing over it and a ring spreading out along the streets
+    const lures = G.units.filter(u => u.lureT > 0);
+    while (FX.flares.length < lures.length) {
+        const f = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+        V.scene.add(f);
+        FX.flares.push(f);
+        FX.lureRings.push(fxRing(0xff5a3a));
+    }
+    FX.flares.forEach((f, k) => {
+        const u = lures[k], r = FX.lureRings[k];
+        f.visible = r.visible = !!u;
+        if (!u)
+            return;
+        const pulse = 0.5 + 0.5 * Math.sin(time * 14), spread = (time * 0.8) % 1;
+        f.position.set(u.x, 2.6 + Math.sin(time * 3) * 0.2, u.z);
+        f.scale.setScalar(1 + pulse * 0.8);
+        f.material.opacity = 0.6 + pulse * 0.4;
+        r.position.set(u.x, 0.08, u.z);
+        r.scale.setScalar(2 + spread * 14);
+        r.material.opacity = (1 - spread) * 0.7;
+    });
+    // a block being held: a ring round it, green while a unit is there
+    const holds = G.missions.filter(m => m.kind === 'hold');
+    while (FX.holdRings.length < holds.length)
+        FX.holdRings.push(fxRing(0x8fb27a));
+    FX.holdRings.forEach((r, k) => {
+        const m = holds[k];
+        r.visible = !!m;
+        if (!m)
+            return;
+        const held = G.units.some(u => dist2(u.x, u.z, m.x, m.z) < 6.5 * 6.5), mat = r.material;
+        r.position.set(m.x, 0.08, m.z);
+        r.scale.setScalar(6.5);
+        mat.color.setHex(held ? 0x8fb27a : 0xe2a23a);
+        mat.opacity = held ? 0.85 : 0.35 + 0.3 * Math.abs(Math.sin(time * 3));
+    });
+}
+
 // ---- ui.ts ----
 // The HTML around the 3D view: the top bar, the selection panel and dispatch log, the build bar,
 // the start, help and end screens, and pointer, touch and keyboard input.
@@ -3354,6 +4125,7 @@ const UI = {
     lastHud: 0,
     lastPanelKey: '',
     toastT: 0,
+    pressT: 0, // a panel button acted on pointerdown; ignore the click that follows
 };
 const $ = (s) => document.querySelector(s);
 const esc = (s) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -3419,21 +4191,29 @@ function updateHud(now) {
         UI.toastT = 0;
     }
 }
+const LANDMARK_LABEL = { stadium: 'Stadium', cathedral: 'Cathedral', station: 'Railway station', market: 'Market square', hospital: 'Hospital', victory: 'Park and monument', millbrook: 'Park and bandstand', base: 'Army base', townhall: 'City Hall' };
 function bar(v, max, cls = '') { return `<span class="hp ${cls}"><i style="width:${clamp((v / Math.max(1, max)) * 100, 0, 100).toFixed(0)}%"></i></span>`; }
 function refreshPanel(force) {
     UI.sel = UI.sel.filter(u => G.units.includes(u));
     let html = '';
     if (UI.sel.length) {
+        const one = UI.sel.length === 1;
         html = UI.sel.slice(0, 6).map(u => {
-            const s = UNITS[u.kind], hp = u.members.reduce((a, m) => a + m.hp, 0), max = s.members * s.hp;
-            return `<div class="unit"><div class="row"><b>${esc(u.name)}</b><span>${s.vehicle ? '' : `${u.members.length}/${s.members} men · `}${u.kills} kills</span></div>${bar(hp, max, hp < max * 0.35 ? 'low' : '')}<p class="note">${u.goal >= 0 ? 'Moving' : 'Holding and firing at anything in range'} · range ${s.range}</p>${u.kind === 'apc' ? `<p class="note">Carrying <b>${u.cargo}</b> of 60 civilians. Tap a block to load people, then tap near an evacuation point to drop them off.</p>` : ''}</div>`;
+            const s = UNITS[u.kind], hp = u.members.reduce((a, m) => a + m.hp, 0), max = s.members * s.hp, a = ABILITY[u.kind];
+            const next = RANKS[u.rank + 1], cost = reinforceCost(u), canR = cost > 0 && nearSupply(u) && G.funds >= cost;
+            const rTitle = u.kind === 'militia' ? 'Militia cannot be reinforced' : !cost ? 'At full strength' : !nearSupply(u) ? 'Reinforce at Fort Aldermoor or an evacuation point' : G.funds < cost ? `Needs $${cost}` : 'Refill the ranks and patch the wounded; the unit keeps its rank';
+            return `<div class="unit"><div class="row"><b>${esc(u.name)}</b><span>${u.rank ? `<i class="rank r${u.rank}" title="${RANKS[u.rank].name}">${'★'.repeat(u.rank)} ${RANKS[u.rank].name}</i> · ` : ''}${s.vehicle ? '' : `${u.members.length}/${s.members} men · `}${u.kills} kills</span></div>${bar(hp, max, hp < max * 0.35 ? 'low' : '')}
+        <p class="note">${u.lureT > 0 ? '<b class="warn">Siren on: drawing the infected</b>' : u.goal >= 0 ? 'Moving' : 'Holding and firing at anything in range'} · range ${s.range}${u.vip ? ' · <b class="warn">VIP aboard</b>' : ''}</p>
+        ${u.kind === 'apc' ? `<p class="note">Carrying <b>${u.cargo}</b> of 60 civilians. Tap a block to load people, then tap near an evacuation point to drop them off.</p>` : ''}
+        <div class="btns abil"><button class="btn sm" data-act="ability" data-id="${u.id}" title="${esc(a.desc)}">${a.name}${one ? ' <kbd>F</kbd>' : ''}<span class="cd" data-cd="${u.id}"></span></button>${u.kind === 'militia' ? '' : `<button class="btn sm" data-act="reinforce" data-id="${u.id}" title="${esc(rTitle)}" ${canR ? '' : 'disabled'}>${UNITS[u.kind].vehicle ? 'Repair' : 'Reinforce'}${cost ? ` · $${cost}` : ''}${one ? ' <kbd>R</kbd>' : ''}</button>`}</div>
+        ${one ? `<p class="note">${esc(a.desc)}${next ? ` ${next.kills - u.kills} more kills to ${next.name.toLowerCase()}.` : ''}</p>` : ''}</div>`;
         }).join('') + (UI.sel.length > 6 ? `<p class="note">and ${UI.sel.length - 6} more</p>` : '') +
-            `<p class="note">Tap a street to move. Right-click also moves. Esc to deselect.</p><button data-act="desel" class="btn">Deselect</button>`;
+            `<p class="note">Tap a street to move. Right-click also moves. F uses every selected unit's ability. Esc to deselect.</p><button data-act="desel" class="btn">Deselect</button>`;
     }
     else if (UI.block) {
         const b = UI.block, status = b.fallen ? 'Overrun' : b.pop <= 0 ? 'Empty' : b.evacuating ? 'Evacuating' : 'Sheltering';
         html = `<div class="row"><b class="big">${esc(b.name)}</b><span class="tag ${b.fallen ? 'bad' : b.evacuating ? 'warn' : ''}">${status}</span></div>
-      <p class="note">${{ downtown: 'Downtown', residential: 'Residential', suburb: 'Suburb', industrial: 'Industrial', docks: 'Docks', hospital: 'Hospital', park: 'Park', base: 'Army base' }[b.district]}</p>
+      <p class="note">${b.landmark ? LANDMARK_LABEL[b.landmark] : { downtown: 'Downtown', residential: 'Residential', suburb: 'Suburb', industrial: 'Industrial', docks: 'Docks', hospital: 'Hospital', park: 'Park', base: 'Army base' }[b.district]}</p>
       ${b.popMax ? `<div class="row"><span>${fmtPeople(b.pop)} of ${fmtPeople(b.popMax)} still inside</span></div>${bar(b.pop, b.popMax)}` : ''}
       ${b.popMax ? `<div class="btns"><button class="btn" data-act="evacb" ${b.pop <= 0 || b.evacuating ? 'disabled' : ''}>Evacuate</button><button class="btn" data-act="militia" ${b.pop < 60 || G.funds < 100 ? 'disabled' : ''}>Raise militia · $100</button></div>
       <p class="note">${b.evacuating ? 'Residents are heading for the nearest evacuation point.' : 'Residents stay behind closed doors until told to go, or until the infected come close.'}</p>` : ''}`;
@@ -3448,51 +4228,135 @@ function refreshPanel(force) {
         html = `<p class="note">Tap a block to evacuate it or raise militia. Tap a unit to command it. Drag to pan, scroll or pinch to zoom.</p>`;
     }
     const ms = $('#missions');
-    ms.hidden = !G.missions.length;
-    const mHtml = G.missions.length ? `<h2>Missions</h2>` + G.missions.map(m => `<div class="mission"><p>${m.kind === 'crate' ? `Supply drop · $${m.reward}` : `${m.people} survivors · $${m.reward}`} <b class="${m.t < 15 ? 'urgent' : ''}">${Math.ceil(m.t)}s</b></p><button data-act="goto" data-x="${m.x}" data-z="${m.z}">Show</button></div>`).join('') : '';
+    const hq = G.hqOrders;
+    ms.hidden = !G.missions.length && !hq.length;
+    const mHtml = (hq.length ? `<h2>Orders from HQ</h2><ul class="orders">` + hq.map(o => `<li class="${o.done ? 'done' : ''}"><span>${o.done ? '✓' : '○'}</span>${esc(o.text)} <b>$${o.reward}</b></li>`).join('') + '</ul>' : '') +
+        (G.missions.length ? `<h2>Missions</h2>` + G.missions.map(m => `<div class="mission"><p>${missionText(m)}${m.t < 999 ? ` <b class="${m.t < 15 ? 'urgent' : ''}">${Math.ceil(m.t)}s</b>` : ''}</p><button data-act="goto" data-x="${m.x}" data-z="${m.z}">Show</button></div>`).join('') : '');
     if (ms.innerHTML !== mHtml)
         ms.innerHTML = mHtml;
     const logHtml = G.log.slice(0, 14).map(l => `<li class="${l.kind}"><time>${fmtTime(GAME_SECONDS - l.t)}</time>${esc(l.text)}</li>`).join('');
     const key = html + logHtml;
-    if (!force && key === UI.lastPanelKey)
+    if (force || key !== UI.lastPanelKey) {
+        UI.lastPanelKey = key;
+        $('#sel').innerHTML = html;
+        $('#side').classList.toggle('empty', !UI.sel.length && !UI.block && !UI.evac);
+        $('#side').classList.toggle('has-missions', G.missions.length > 0 || G.hqOrders.length > 0);
+        $('#log').innerHTML = logHtml;
+    }
+    // ability cooldowns tick every second: update them in place rather than rebuilding the panel
+    for (const u of UI.sel) {
+        const el = document.querySelector(`[data-cd="${u.id}"]`);
+        if (!el)
+            continue;
+        const v = u.lureT > 0 ? ` · ${Math.ceil(u.lureT)}s on` : u.ab > 0 ? ` · ${Math.ceil(u.ab)}s` : ' · ready';
+        if (el.textContent !== v)
+            el.textContent = v;
+        el.parentElement.classList.toggle('ready', u.ab <= 0);
+    }
+}
+function missionText(m) {
+    if (m.kind === 'crate')
+        return `Supply drop · $${m.reward}`;
+    if (m.kind === 'survivors')
+        return `${m.people} survivors · $${m.reward}`;
+    if (m.kind === 'vip')
+        return m.carrier ? `Bring the VIP to the harbour or the fort · $${m.reward}` : `VIP: ${esc(m.who.split(',')[0])} · $${m.reward}`;
+    return `Hold ${esc(G.blocks[m.block].name)} · $${m.reward} + militia ${bar(m.prog, m.need)}<small>${Math.floor(m.prog)} of ${m.need}s held</small>`;
+}
+/** Use the special ability of every selected unit; reports the first refusal if none went off. */
+function useSelAbility() {
+    if (!UI.sel.length) {
+        toast('Select a unit first, then press F.');
         return;
-    UI.lastPanelKey = key;
-    $('#sel').innerHTML = html;
-    $('#side').classList.toggle('empty', !UI.sel.length && !UI.block && !UI.evac);
-    $('#side').classList.toggle('has-missions', G.missions.length > 0);
-    $('#log').innerHTML = logHtml;
+    }
+    let err = null, ok = 0;
+    for (const u of UI.sel) {
+        const e = useAbility(u);
+        if (e)
+            err = err !== null && err !== void 0 ? err : e;
+        else
+            ok++;
+    }
+    if (!ok && err)
+        toast(err);
+    refreshPanel(true);
+}
+function panelAct(t) {
+    const u = G.units.find(x => x.id === Number(t.dataset.id));
+    if (!u)
+        return;
+    const err = t.dataset.act === 'ability' ? useAbility(u) : reinforce(u);
+    if (err)
+        toast(err);
+    refreshPanel(true);
+}
+function decide(i) {
+    const err = choose(i);
+    if (err) {
+        toast(err);
+        return;
+    }
+    showOverlay('');
+    refreshPanel(true);
+}
+function reinforceSel() {
+    if (!UI.sel.length) {
+        toast('Select a unit first, then press R.');
+        return;
+    }
+    let err = null, ok = 0;
+    for (const u of UI.sel) {
+        const e = reinforce(u);
+        if (e)
+            err = err !== null && err !== void 0 ? err : e;
+        else
+            ok++;
+    }
+    if (!ok && err)
+        toast(err);
+    refreshPanel(true);
 }
 function showOverlay(which) {
-    var _a;
+    var _a, _b;
     UI.overlay = which;
     const ov = $('#overlay');
     ov.hidden = !which;
     if (!which)
         return;
+    if (which === 'decide') {
+        const d = G.decision;
+        ov.innerHTML = `<div class="card decide" role="dialog" aria-labelledby="dtitle"><span class="eyebrow">A decision · the game is paused</span><h1 id="dtitle">${esc(d.title)}</h1>
+      <p class="body">${esc(d.text)}</p><div class="opts">${d.opts.map((o, i) => `<button class="opt" data-act="choose" data-i="${i}" ${o.off ? 'disabled' : ''}><b><kbd>${i + 1}</kbd>${esc(o.label)}</b><span>${esc(o.note)}</span>${o.off ? `<em>${esc(o.off)}</em>` : ''}</button>`).join('')}</div></div>`;
+        (_a = ov.querySelector('.opt:not([disabled])')) === null || _a === void 0 ? void 0 : _a.focus();
+        return;
+    }
     const controls = `<dl class="keys"><dt>Select</dt><dd>Tap or click a unit, block or evacuation point. Shift-click adds units; Ctrl+A selects every unit.</dd>
     <dt>Move</dt><dd>With units selected, tap a street. Right-click also moves.</dd><dt>Camera</dt><dd>Drag to pan, scroll or pinch to zoom, Q and E to turn, WASD or arrows to pan.</dd>
+    <dt>Abilities</dt><dd>F uses the selected units' special abilities; R reinforces or repairs them at the fort or an evacuation point.</dd>
     <dt>Buy</dt><dd>Buttons along the bottom, or keys 1 to 7, then tap the map.</dd><dt>Time</dt><dd>Space pauses. Speeds 1×, 2× and 4× at the top.</dd></dl>`;
     if (which === 'start' || which === 'help') {
         ov.innerHTML = `<div class="card"><span class="eyebrow">${which === 'start' ? 'Prototype · Real time' : 'Field manual'}</span><h1>Last Boat to Calder: City</h1>
       <p class="body">The outbreak started at St Brennan's Hospital on the east side. You hold Fort Aldermoor in the north-west and the harbour in the south. The last ship sails in 12 minutes. Get as many people out as you can.</p>
       <ul><li>People shelter at home until you order a block to evacuate, or the infected come close and they panic. Evacuees walk to the nearest evacuation point and wait for a ship or bus.</li>
       <li>The infected hunt the nearest people: anyone in the streets, crowds at the evacuation points, your troops, and blocks they can break into.</li>
-      <li>Your troops fire at anything in range on their own. Money comes in steadily, plus a bounty for every kill and every person evacuated.</li>
+      <li>Troops fire on their own. <b>Each unit also has an ability</b> (F): grenades, molotovs, a tank barrage, or an APC's siren that pulls the infected after it. Units earn <b>ranks</b> with kills; reinforce them (R) at the fort or an evacuation point.</li>
       <li><b>APCs rescue people:</b> select one and tap a block to load up to 60, then tap near an evacuation point to drop them off.</li>
-      <li><b>Missions</b> pop up on the map: supply drops worth money, and survivors on rooftops who need any unit to reach them before the infected do.</li>
+      <li><b>Missions</b> pop up: supply drops, rooftop survivors, VIPs to bring out, blocks to hold. Now and then command asks you to <b>decide</b> something; the game waits for you.</li>
       <li>Watch for <b>runners</b> (fast, red shirts, go down easily) and <b>brutes</b> (huge, soak up fire, smash doors in). At minute 8 a great horde arrives from the east.</li>
       <li>Each figure stands for 10 people.</li></ul>${controls}
       <div class="btns"><button class="btn primary" data-act="${which === 'start' ? 'begin' : 'closehelp'}">${which === 'start' ? 'Take command' : 'Back to the city'}</button><a class="btn" href="../">The original game</a></div></div>`;
     }
     else {
-        const o = G.over, s = G.stats;
+        const o = G.over, s = G.stats, d = G.deaths, elsewhere = s.dead - d.streets - d.queues - d.homes - d.fire;
         ov.innerHTML = `<div class="card ${o.pct >= 30 ? '' : 'red'}"><span class="eyebrow">${o.why === 'time' ? 'The last ship has sailed' : 'The city is empty'}</span><h1>${esc(o.grade)}</h1>
       <p class="big">${o.pct.toFixed(0)}% of the city saved</p>
-      <div class="stats"><div><b>${fmtPeople(s.evacuated)}</b><span>Evacuated</span></div><div><b>${fmtPeople(s.dead)}</b><span>Dead</span></div><div><b>${s.killed * PER_AGENT}</b><span>Infected destroyed</span></div><div><b>${s.unitsLost}</b><span>Units lost</span></div><div><b>${s.missions}</b><span>Missions done</span></div><div><b>${fmtPeople(s.ferried)}</b><span>Rescued by APC</span></div><div><b>$${s.spent}</b><span>Spent</span></div></div>
+      <div class="stats"><div><b>${fmtPeople(s.evacuated)}</b><span>Evacuated</span></div><div><b>${fmtPeople(s.dead)}</b><span>Dead</span></div><div><b>${s.killed * PER_AGENT}</b><span>Infected destroyed</span></div><div><b>${s.unitsLost}</b><span>Units lost</span></div><div><b>${s.missions}</b><span>Missions done</span></div><div><b>${fmtPeople(s.ferried)}</b><span>Rescued by APC</span></div><div><b>${G.troopsHome}</b><span>Troops home</span></div><div><b>$${s.spent}</b><span>Spent</span></div></div>
+      <p class="note">Where people died: ${fmtPeople(G.deaths.streets)} in the streets, ${fmtPeople(G.deaths.queues)} waiting at evacuation points, ${fmtPeople(G.deaths.homes)} in their homes${G.deaths.fire ? `, ${fmtPeople(G.deaths.fire)} under your own air strikes` : ''}${elsewhere > 0 ? `, ${fmtPeople(elsewhere)} on rooftops, in APCs and among the militia` : ''}.</p>
+      ${G.ace ? `<p class="note">Unit of the night: <b>${esc(G.ace.name)}</b>${G.ace.rank ? ` ${'★'.repeat(G.ace.rank)}` : ''}, ${G.ace.kills} kills${G.units.some(u => u.name === G.ace.name) ? '' : ', lost in the fighting'}.</p>` : ''}
       <p class="note">Grades: 60% Saviour of the city, 45% An orderly withdrawal, 30% A bitter retreat.</p>
       <div class="btns"><button class="btn primary" data-act="again">Play again</button><a class="btn" href="../">The original game</a></div></div>`;
     }
-    (_a = ov.querySelector('.btn.primary')) === null || _a === void 0 ? void 0 : _a.focus();
+    (_b = ov.querySelector('.btn.primary')) === null || _b === void 0 ? void 0 : _b.focus();
 }
 function syncMute() {
     const b = document.getElementById('mute');
@@ -3670,7 +4534,23 @@ function bindInput(canvas) {
                     refreshPanel(true);
                 }
                 break;
+            case 'choose':
+                decide(Number(t.dataset.i));
+                break;
+            case 'ability':
+            case 'reinforce':
+                if (performance.now() - UI.pressT > 700)
+                    panelAct(t);
+                break;
         }
+    });
+    // the unit panel can be rebuilt between press and release while a fight is on, so its buttons act on press
+    $('#sel').addEventListener('pointerdown', e => {
+        const t = e.target.closest('[data-act="ability"],[data-act="reinforce"]');
+        if (!t || t.disabled || e.button !== 0)
+            return;
+        UI.pressT = performance.now();
+        panelAct(t);
     });
     const held = new Set();
     document.addEventListener('keydown', e => {
@@ -3680,6 +4560,8 @@ function bindInput(canvas) {
         if (UI.overlay) {
             if (e.key === 'Escape' && UI.overlay === 'help')
                 showOverlay('');
+            if (UI.overlay === 'decide' && /^[1-9]$/.test(e.key))
+                decide(Number(e.key) - 1);
             return;
         }
         const k = e.key.toLowerCase();
@@ -3721,6 +4603,14 @@ function bindInput(canvas) {
         if (k === 'm') {
             setMuted(!AUD.muted);
             syncMute();
+            return;
+        }
+        if (k === 'f') {
+            useSelAbility();
+            return;
+        }
+        if (k === 'r') {
+            reinforceSel();
             return;
         }
         if (k === '+' || k === '=') {
@@ -3802,7 +4692,7 @@ function resetView() {
         if (!UI.overlay && !G.over && G.speed > 0) {
             acc += real * G.speed;
             let n = 0;
-            while (acc >= STEP && n < 16) {
+            while (acc >= STEP && n < 16 && !G.decision) {
                 tick(STEP);
                 acc -= STEP;
                 n++;
@@ -3814,6 +4704,10 @@ function resetView() {
         panKeys(real);
         if (G.over && UI.overlay !== 'end')
             showOverlay('end');
+        else if (G.decision && !UI.overlay) {
+            acc = 0;
+            showOverlay('decide');
+        }
         const place = UI.mode && UI.hover ? { x: UI.hover.x, z: UI.hover.z, r: PLACE_R[UI.mode], ok: G.funds >= ORDER_COST[UI.mode] } : null;
         drawFrame(G.t, gameDt, UI.sel, UI.block, place);
         playSfx(real);
@@ -3824,7 +4718,7 @@ function resetView() {
     requestAnimationFrame(frame);
     // hooks for automated tests
     window.City = {
-        get G() { return G; }, tick, order, moveUnits, evacuateBlock, sendToBlock, UI, showOverlay,
+        get G() { return G; }, tick, order, moveUnits, evacuateBlock, sendToBlock, UI, showOverlay, useAbility, reinforce, choose,
         reset(seed) { newGame(seed); resetView(); showOverlay(''); },
         look(x, z, dist) { Object.assign(V.cam, { x, z, dist }); },
     };

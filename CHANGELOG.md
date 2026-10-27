@@ -12,6 +12,9 @@ All notable changes, newest first. Dates are when the work was committed.
 - Synthesised sound for gunfire, cannon, explosions, horns, the siren, chimes and groans; camera shake on air strikes; mute with M.
 - A new map: the River Calder crosses the city with four bridges to hold; a stadium, cathedral, City Hall, market square, railway station, a hospital that looks like one, dock cranes and a lighthouse; varied building layouts, street trees, abandoned cars, a richer painted ground, and outskirts beyond the map edge.
 - `tests/city.js` gains an `active` strategy using missions and APCs (64.5% saved).
+- Unit abilities on F (grenades, molotovs, tank HE barrage, APC flare and siren), ranks from kills, and reinforcing on R.
+- Four decisions that pause the game; orders from HQ for the first four minutes; hold-a-block and VIP missions; rooftop survivors through the last six minutes; the great horde makes for the biggest crowd; a last-ship countdown.
+- Floating text over the map for saves, money, promotions and unit barks; deaths by cause and the unit of the night on the end screen.
 
 ### Docs
 - A full documentation set under `docs/`: player guides and code references for both games, the 3D models, a glossary, an FAQ and deployment notes. Plus this changelog and `CONTRIBUTING.md`.

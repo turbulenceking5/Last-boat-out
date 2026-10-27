@@ -1296,8 +1296,30 @@ function resizeView() {
   V.camera.updateProjectionMatrix();
 }
 
+// the blown bridges: the deck's middle gone, broken ends sagging into the river, rubble in the water
+let blown: TGroup | null = null;
+function drawBlownBridges() {
+  if (G.sealed === !!blown) return;
+  if (blown) { V.scene.remove(blown); blown = null; return; } // a new game
+  blown = new THREE.Group();
+  for (const [a, b] of BRIDGES) {
+    const z = (a + b + 1) / 2, d = b - a + 1;
+    const gap = new THREE.Mesh(UNIT_BOX, vmat(0x4f6f78)); gap.scale.set(RIVER_X1 - RIVER_X0 - 0.6, 0.08, d + 0.4); gap.position.set((RIVER_X0 + RIVER_X1 + 1) / 2, -0.02, z); blown.add(gap);
+    for (const side of [-1, 1]) {
+      const end = new THREE.Mesh(UNIT_BOX, vmat(0x6f6a60)); end.scale.set(0.9, 0.18, d * 0.9); end.castShadow = true;
+      end.position.set((RIVER_X0 + RIVER_X1 + 1) / 2 + side * 1.65, -0.18, z); end.rotation.z = side * 0.35; blown.add(end);
+    }
+    for (let k = 0; k < 7; k++) {
+      const r = new THREE.Mesh(UNIT_BOX, vmat(k % 2 ? 0x8a8475 : 0x5a564e)); const s = 0.25 + ((k * 37) % 10) / 25;
+      r.scale.set(s, s * 0.6, s); r.position.set(RIVER_X0 + 0.8 + ((k * 53) % 30) / 10, -0.3, a + ((k * 29) % (d * 10)) / 10 + 0.2); r.rotation.y = k; blown.add(r);
+    }
+  }
+  V.scene.add(blown);
+}
+
 function drawFrame(time: number, dt: number, sel: Unit[], selBlock: Block | null, place: { x: number; z: number; r: number; ok: boolean } | null) {
   if (G.changed) { paintBlocks(); G.changed = false; }
+  drawBlownBridges();
   drawPeople(time);
   drawVehicles(time);
   drawBeacons(time);
@@ -1306,5 +1328,6 @@ function drawFrame(time: number, dt: number, sel: Unit[], selBlock: Block | null
   drawSmoke(time);
   drawMarkers(sel, selBlock, place, time);
   placeCamera();
+  drawFx(time); // fx.ts: ability effects, floating text, rank stars
   V.renderer.render(V.scene, V.camera);
 }

@@ -17,6 +17,7 @@ Notes from a Claude Code cloud session that was asked how to give Claude permiss
 | [11-3d-models.md](11-3d-models.md) | The TypeScript and Three.js place models: how they load, what they show, and checks |
 | [12-city-prototype.md](12-city-prototype.md) | The real-time 3D City prototype: how it is built, the pacing rules and balance |
 | [13-city-more-fun.md](13-city-more-fun.md) | Special infected, APC rescues, missions, the great horde, and sound |
+| [14-city-gameplay-round.md](14-city-gameplay-round.md) | City abilities, ranks, reinforcements, decisions, new and late missions, floating feedback |
 | [11-feel-mechanics-visuals.md](11-feel-mechanics-visuals.md) | Sound, turn feedback, night/experience/airlift, map art |
 
 Screenshots taken during the session are in [screens/](screens/).
