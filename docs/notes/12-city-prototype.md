@@ -35,7 +35,7 @@ Results, 4 seeded games each:
 
 - Every page renders with no script errors at 1280 x 800 and 390 x 844, and there is no horizontal scroll on phones.
 - Real-input test: buying a tank from the bar and tapping the map, Ctrl+A, tapping to move, dragging to pan, wheel zoom, and Space to pause.
-- `tests/city-fuzz.js`: random taps, drags, keys and buttons at both sizes with the game running.
+- `tests/city-fuzz.js`: random taps, drags, keys and buttons at both sizes with the game running. Last run: about 5 minutes of game time per size with up to 1,300 infected on screen, no script errors, scrollWidth 1280 and 390. It takes about 11 minutes in a headless browser with software rendering.
 - The original game's fuzzer still passes after the link to the City was added to its setup screen.
 
 ## Not in the prototype yet
