@@ -419,52 +419,168 @@ function drawPeople(time: number) {
 }
 
 // ---- vehicles, ships, aircraft ----
+// Small hand-built models. Their geometry is made once and shared (vgeo), as are the materials
+// (vmat). Moving parts are named, and drawVehicles turns wheels, tracks, rotors and radar.
 function part(g: TObject3D, color: number, w: number, h: number, d: number, x = 0, y = 0, z = 0): TMesh {
   const m = new THREE.Mesh(UNIT_BOX, vmat(color)); m.scale.set(w, h, d); m.position.set(x, y, z); m.castShadow = true; g.add(m); return m;
 }
 
+const vgeos = new Map<string, TGeometry>();
+function vgeo(key: string, make: () => TGeometry): TGeometry {
+  let g = vgeos.get(key);
+  if (!g) { g = make(); vgeos.set(key, g); }
+  return g;
+}
+function mesh(g: TObject3D, geo: TGeometry, color: number | TMaterial, x = 0, y = 0, z = 0, shadow = true): TMesh {
+  const m = new THREE.Mesh(geo, typeof color === 'number' ? vmat(color) : color); m.position.set(x, y, z); m.castShadow = shadow; g.add(m); return m;
+}
+/** A side profile, [z, y] points running round it, extruded across the width and centred on x = 0. */
+function profileGeo(pts: Array<[number, number]>, width: number): TGeometry {
+  const s = new THREE.Shape();
+  s.moveTo(pts[0][0], pts[0][1]);
+  for (const [z, y] of pts.slice(1)) s.lineTo(z, y);
+  return new THREE.ExtrudeGeometry(s, { depth: width, bevelEnabled: false }).rotateY(-Math.PI / 2).translate(width / 2, 0, 0);
+}
+/** A plan outline, [x, z] points, extruded upward by h. */
+function planGeo(pts: Array<[number, number]>, h: number): TGeometry {
+  const s = new THREE.Shape();
+  s.moveTo(pts[0][0], -pts[0][1]);
+  for (const [x, z] of pts.slice(1)) s.lineTo(x, -z);
+  return new THREE.ExtrudeGeometry(s, { depth: h, bevelEnabled: false }).rotateX(-Math.PI / 2);
+}
+/** A cylinder lying along x (wheels, rollers), or along z with alongZ. */
+const rollerGeo = (r: number, w: number, seg = 8, alongZ = false) => vgeo(`roll${r}|${w}|${seg}|${alongZ}`, () => {
+  const g = new THREE.CylinderGeometry(r, r, w, seg);
+  return alongZ ? g.rotateX(Math.PI / 2) : g.rotateZ(Math.PI / 2);
+});
+
+interface VehState { px: number; pz: number; roll: number; wheels: TObject3D[]; cleats: TObject3D[]; barrel: TObject3D | null; r: number; cd: number; kick: number; t: number }
+
 function makeVehicle(kind: UnitKind): TGroup {
   const g = new THREE.Group();
+  const st: VehState = { px: NaN, pz: NaN, roll: 0, wheels: [], cleats: [], barrel: null, r: 0.2, cd: 0, kick: 0, t: 0 };
+  const turret = new THREE.Group(); turret.name = 'turret'; g.add(turret);
   if (kind === 'tank') {
-    part(g, 0x2f3329, 1.3, 0.3, 2.1);
-    part(g, 0x55633a, 1.2, 0.3, 1.9, 0, 0.25);
-    const turret = new THREE.Group(); turret.name = 'turret'; turret.position.y = 0.55; g.add(turret);
-    part(turret, 0x55633a, 0.8, 0.3, 0.9);
-    part(turret, 0x3f4a2c, 0.12, 0.12, 1.3, 0, 0.1, 0.9);
+    const hull = 0x55633a, dark = 0x3f4a2c, track = 0x2a2b26;
+    // tracks with road wheels on the outside and cleats that run along the top
+    const trackGeo = vgeo('tankTrack', () => profileGeo([[-1.2, 0.02], [1.02, 0.02], [1.24, 0.2], [1.1, 0.4], [-1.24, 0.4], [-1.34, 0.2]], 0.32));
+    for (const sx of [-1, 1]) {
+      mesh(g, trackGeo, track, sx * 0.58, 0, 0);
+      for (let k = 0; k < 5; k++) st.wheels.push(mesh(g, rollerGeo(0.14, 0.06, 8), 0x3a3d33, sx * 0.75, 0.17, -0.85 + k * 0.42));
+      for (let k = 0; k < 7; k++) st.cleats.push(part(g, 0x1c1d1a, 0.33, 0.03, 0.08, sx * 0.58, 0.4, 0));
+    }
+    st.r = 0.14;
+    mesh(g, vgeo('tankHull', () => profileGeo([[-1.15, 0.2], [1.0, 0.2], [1.25, 0.42], [0.95, 0.58], [-1.1, 0.58], [-1.2, 0.45]], 0.86)), hull);
+    part(g, 0x2b2622, 0.6, 0.12, 0.35, 0, 0.58, -0.85);                                      // engine deck grille
+    part(g, 0x6b5236, 0.2, 0.14, 0.3, 0.32, 0.58, -0.55);                                    // stowage
+    turret.position.set(0, 0.58, -0.1);
+    mesh(turret, vgeo('tankTurret', () => planGeo([[-0.44, -0.55], [0.44, -0.55], [0.5, 0.05], [0.28, 0.5], [-0.28, 0.5], [-0.5, 0.05]], 0.3)), hull);
+    part(turret, dark, 0.7, 0.04, 0.3, 0, 0.3, -0.42);                                        // bustle rack
+    mesh(turret, vgeo('cupola', () => new THREE.CylinderGeometry(0.13, 0.15, 0.12, 8).translate(0, 0.06, 0)), dark, 0.22, 0.3, -0.12);
+    part(turret, 0x1f1f1d, 0.03, 0.03, 0.3, 0.22, 0.42, 0.0);                                 // machine gun
+    part(turret, dark, 0.3, 0.22, 0.16, 0, 0.04, 0.52);                                       // mantlet
+    const barrel = new THREE.Group(); barrel.position.set(0, 0.15, 0.55); turret.add(barrel);
+    mesh(barrel, vgeo('tankGun', () => new THREE.CylinderGeometry(0.045, 0.055, 1.6, 6).rotateX(Math.PI / 2).translate(0, 0, 0.8)), dark);
+    mesh(barrel, vgeo('tankBrake', () => new THREE.CylinderGeometry(0.075, 0.075, 0.18, 6).rotateX(Math.PI / 2)), 0x2f3329, 0, 0, 1.55);
+    st.barrel = barrel;
   } else {
-    part(g, 0x2f3329, 1.1, 0.25, 1.9, 0, 0.05);
-    part(g, 0x5d6b45, 1.05, 0.55, 1.8, 0, 0.25);
-    part(g, 0x2b3438, 1.0, 0.12, 0.4, 0, 0.6, 0.55);
-    const turret = new THREE.Group(); turret.name = 'turret'; turret.position.y = 0.8; g.add(turret);
-    part(turret, 0x4a5638, 0.35, 0.18, 0.35);
-    part(turret, 0x222, 0.06, 0.06, 0.5, 0, 0.06, 0.3);
+    // an eight-wheeled armoured personnel carrier with a remote gun, hatches and a rear door
+    const hull = 0x5d6b45, dark = 0x3f4a2c;
+    for (const sx of [-1, 1]) for (const z of [-0.72, -0.28, 0.28, 0.72]) st.wheels.push(mesh(g, rollerGeo(0.21, 0.16, 8), 0x22231f, sx * 0.47, 0.21, z));
+    st.r = 0.21;
+    mesh(g, vgeo('apcHull', () => profileGeo([[-1.0, 0.2], [0.85, 0.2], [1.08, 0.42], [0.62, 0.78], [-0.95, 0.78], [-1.02, 0.6]], 0.92)), hull);
+    for (const sx of [-1, 1]) part(g, dark, 0.06, 0.06, 1.8, sx * 0.47, 0.45, -0.05);       // wheel arches
+    part(g, 0x2b3438, 0.6, 0.08, 0.05, 0, 0.66, 0.75);                                       // vision blocks
+    for (const sx of [-1, 1]) part(g, 0xeae2c0, 0.1, 0.06, 0.04, sx * 0.32, 0.5, 1.0);      // headlights
+    for (const [x, z] of [[-0.22, -0.55], [0.22, -0.55]]) part(g, dark, 0.3, 0.04, 0.32, x, 0.78, z); // hatches
+    part(g, dark, 0.5, 0.42, 0.04, 0, 0.28, -1.02);                                          // rear door
+    part(g, 0x1f1f1d, 0.015, 0.7, 0.015, -0.4, 0.78, -0.85).name = 'aerial';
+    turret.position.set(0, 0.78, 0.15);
+    mesh(turret, vgeo('apcRws', () => planGeo([[-0.2, -0.2], [0.2, -0.2], [0.22, 0.12], [0.1, 0.24], [-0.1, 0.24], [-0.22, 0.12]], 0.2)), 0x4a5638);
+    part(turret, 0x2b3438, 0.12, 0.08, 0.04, 0.12, 0.08, 0.24);                                // sight
+    const barrel = new THREE.Group(); barrel.position.set(-0.05, 0.1, 0.22); turret.add(barrel);
+    mesh(barrel, vgeo('apcGun', () => new THREE.CylinderGeometry(0.03, 0.03, 0.75, 6).rotateX(Math.PI / 2).translate(0, 0, 0.37)), 0x222222);
+    st.barrel = barrel;
   }
+  g.userData = st;
   g.scale.setScalar(1.1);
   V.scene.add(g);
   return g;
 }
 
+const CONTAINERS = [0x3d5a78, 0xc4432f, 0xe2a23a, 0x55633a, 0x7f93a6, 0x8a4b3a];
+/** The last freighter out: bow at +z, holds stacked with containers between two deck cranes, the
+ *  bridge and funnel aft, lifeboats, a turning radar, and a wake that shows while she is under way. */
 function makeShip(): TGroup {
   const g = new THREE.Group();
-  const s = new THREE.Shape();
-  s.moveTo(-1.4, -6); s.lineTo(1.4, -6); s.lineTo(1.4, 4.5); s.lineTo(0, 6.5); s.lineTo(-1.4, 4.5); s.lineTo(-1.4, -6);
-  const hull = new THREE.Mesh(new THREE.ExtrudeGeometry(s, { depth: 1.6, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, -0.6, 0), vmat(0x2f3a40));
-  hull.castShadow = true; g.add(hull);
-  part(g, 0xc4432f, 2.9, 0.15, 12.2, 0, -0.4, 0.2);
-  part(g, 0xeeeae0, 2.4, 1.6, 2.6, 0, 1.0, -4.0);
-  part(g, 0xeeeae0, 1.8, 0.8, 1.8, 0, 2.6, -4.0);
-  part(g, 0x2b2b2b, 0.7, 1.4, 0.7, 0, 1.0, -1.8);
-  part(g, 0xe2a23a, 0.72, 0.3, 0.72, 0, 2.1, -1.8);
-  for (const z of [0.6, 2.4]) part(g, 0x3d5a78, 2.2, 0.9, 1.5, 0, 1.0, z);
+  const hullPlan: Array<[number, number]> = [[-1.4, -6.2], [1.4, -6.2], [1.5, -5.4], [1.5, 3.6], [1.0, 5.6], [0, 6.7], [-1.0, 5.6], [-1.5, 3.6], [-1.5, -5.4]];
+  mesh(g, vgeo('shipHull', () => planGeo(hullPlan, 1.75).translate(0, -0.75, 0)), 0x2f3a40);
+  mesh(g, vgeo('shipBoot', () => planGeo(hullPlan, 0.3).scale(1.01, 1, 1.004).translate(0, -0.25, 0)), 0xc4432f, 0, 0, 0, false); // boot-top
+  mesh(g, vgeo('shipDeck', () => planGeo(hullPlan, 0.05).scale(0.94, 1, 0.97).translate(0, 0.98, 0)), 0x7a7468, 0, 0, 0, false);
+  part(g, 0x2f3a40, 2.4, 0.35, 0.9, 0, 1.0, 5.3);                                            // forecastle
+  part(g, 0xeeeae0, 0.08, 1.4, 0.08, 0, 1.3, 5.6);                                           // foremast
+  // holds and containers, two tiers, in the harbour's colours
+  let k = 0;
+  for (const z of [-0.6, 1.3, 3.2]) for (let tier = 0; tier < 2; tier++) for (const x of [-0.85, 0, 0.85]) {
+    if (tier === 1 && (k * 7) % 5 === 0) { k++; continue; }
+    part(g, CONTAINERS[(k * 5 + tier) % CONTAINERS.length], 0.8, 0.55, 1.75, x, 1.03 + tier * 0.57, z);
+    k++;
+  }
+  // deck cranes between the holds
+  for (const z of [0.35, 2.25]) {
+    const c = new THREE.Group(); c.position.set(z < 1 ? 1.05 : -1.05, 1.0, z); c.name = 'crane'; g.add(c);
+    mesh(c, vgeo('cranePost', () => new THREE.CylinderGeometry(0.12, 0.15, 1.9, 6).translate(0, 0.95, 0)), 0xe2a23a);
+    part(c, 0xe2a23a, 0.3, 0.3, 0.35, 0, 1.75, 0);
+    const jib = part(c, 0xe2a23a, 0.1, 0.1, 2.6, 0, 1.9, 1.1); jib.rotation.x = -0.35;
+    c.rotation.y = z < 1 ? -0.5 : 2.6;
+  }
+  // the bridge aft: three decks, windows across the front, wings, a radar mast and the funnel
+  const aft = -4.4;
+  part(g, 0xeeeae0, 2.6, 1.0, 2.0, 0, 1.0, aft);
+  part(g, 0xeeeae0, 2.2, 0.8, 1.7, 0, 2.0, aft - 0.1);
+  part(g, 0xeeeae0, 3.0, 0.7, 1.3, 0, 2.8, aft + 0.1);
+  part(g, 0x2b3438, 2.9, 0.22, 0.04, 0, 3.15, aft + 0.76);
+  part(g, 0x2b3438, 2.1, 0.16, 0.04, 0, 2.45, aft + 0.76);
+  part(g, 0x2b3438, 2.5, 0.16, 0.04, 0, 1.6, aft + 1.0);
+  part(g, 0xd8d2bf, 3.1, 0.06, 1.4, 0, 3.5, aft + 0.1);                                      // wheelhouse roof
+  part(g, 0xd8d2bf, 0.08, 0.9, 0.08, 0, 3.5, aft - 0.2);
+  const radar = part(g, 0x2b2b2b, 0.7, 0.06, 0.12, 0, 4.35, aft - 0.2); radar.name = 'radar';
+  mesh(g, vgeo('funnel', () => new THREE.CylinderGeometry(0.42, 0.5, 2.6, 8).scale(1, 1, 1.3).translate(0, 1.3, 0)), 0x2b2b2b, 0, 1.0, aft - 1.05);
+  mesh(g, vgeo('funnelBand', () => new THREE.CylinderGeometry(0.44, 0.46, 0.35, 8).scale(1, 1, 1.3).translate(0, 0.175, 0)), 0xe2a23a, 0, 2.95, aft - 1.05);
+  for (const sx of [-1, 1]) {
+    mesh(g, vgeo('lifeboat', () => new THREE.CapsuleGeometry(0.2, 0.7, 2, 6).rotateX(Math.PI / 2)), 0xe2642a, sx * 1.42, 2.25, aft - 0.2);
+  }
+  // her wake and bow wave: pale strips on the water, shown while she moves
+  const wake = new THREE.Group(); wake.name = 'wake'; wake.visible = false; g.add(wake);
+  for (let i = 0; i < 6; i++) { // churned water astern, fading as it spreads
+    const w = mesh(wake, UNIT_BOX, vmat(0xe8efe9, { opacity: [0.5, 0.42, 0.34, 0.26, 0.2, 0.14][i] }), 0, -0.06 - i * 0.002, -6.4 - i * 1.5, false);
+    w.scale.set(1.6 + i * 0.55, 0.02, 1.5); w.rotation.y = (i % 2 ? 0.08 : -0.08);
+  }
+  for (const sx of [-1, 1]) { // the V of the wake, and the bow wave
+    const k = mesh(wake, UNIT_BOX, vmat(0xe8efe9, { opacity: 0.26 }), sx * 1.6, -0.07, -10.5, false); k.scale.set(0.22, 0.02, 9); k.rotation.y = -sx * 0.3;
+    const b = mesh(wake, UNIT_BOX, vmat(0xe8efe9, { opacity: 0.5 }), sx * 1.15, -0.06, 4.6, false); b.scale.set(0.3, 0.02, 3.2); b.rotation.y = sx * 0.45;
+  }
+  // smoke from the funnel
+  const smoke = new THREE.Group(); smoke.name = 'smoke'; g.add(smoke);
+  for (let i = 0; i < 5; i++) mesh(smoke, vgeo('puff', () => new THREE.SphereGeometry(0.5, 6, 4)), vmat(0x8d8a82, { opacity: 0.35 }), 0, 0, 0, false);
   g.rotation.y = Math.PI / 2;
   V.scene.add(g);
   return g;
 }
 
+/** A city bus, long along x: amber body, a band of windows, a pale roof and four wheels. */
 function makeBus(): TGroup {
   const g = new THREE.Group();
-  part(g, 0xe2a23a, 0.9, 0.8, 2.4, 0, 0.12);
-  part(g, 0x2b3438, 0.92, 0.22, 2.2, 0, 0.6);
+  const st: VehState = { px: NaN, pz: NaN, roll: 0, wheels: [], cleats: [], barrel: null, r: 0.18, cd: 0, kick: 0, t: 0 };
+  for (const x of [-0.85, 0.85]) for (const sz of [-1, 1]) st.wheels.push(mesh(g, rollerGeo(0.18, 0.14, 8, true), 0x22231f, x, 0.18, sz * 0.43));
+  part(g, 0xe2a23a, 2.6, 0.55, 0.92, 0, 0.14);
+  part(g, 0x2b3438, 2.5, 0.3, 0.94, -0.03, 0.69);
+  part(g, 0x2b3438, 0.04, 0.42, 0.8, 1.3, 0.55);                                              // windscreen
+  part(g, 0xe4dfcf, 2.62, 0.14, 0.94, 0, 0.99);
+  part(g, 0xd8d2bf, 0.8, 0.08, 0.6, -0.5, 1.13);                                              // roof unit
+  part(g, 0xffe6a0, 0.04, 0.1, 0.6, 1.31, 0.88).material = vmat(0xffe6a0, { glow: 0xb08a30 }); // destination board
+  part(g, 0xc4432f, 2.62, 0.06, 0.95, 0, 0.36);                                               // stripe
+  g.userData = st;
   V.scene.add(g); return g;
 }
 
@@ -472,27 +588,62 @@ function makeEvacMarker(kind: Evac['kind']): TGroup {
   const g = new THREE.Group();
   const ring = new THREE.Mesh(new THREE.TorusGeometry(kind === 'harbor' ? 2.4 : 1.5, 0.08, 6, 32).rotateX(Math.PI / 2), vmat(0x8fb27a, { glow: 0x5f8f4a }));
   ring.position.y = 0.05; g.add(ring);
-  const pole = part(g, 0xd8d2bf, 0.08, 2.4, 0.08);
-  void pole;
-  const flag = part(g, 0x8fb27a, 0.7, 0.4, 0.04, 0.35, 2.0);
-  flag.name = 'flag';
+  part(g, 0x3b3631, 0.3, 0.12, 0.3);                                                          // base
+  part(g, 0xd8d2bf, 0.08, 2.4, 0.08);
+  for (let i = 0; i < 3; i++) part(g, 0xc4432f, 0.09, 0.15, 0.09, 0, 0.2 + i * 0.3);          // striped foot of the pole
+  const flag = new THREE.Group(); flag.name = 'flag'; flag.position.y = 2.0; g.add(flag);
+  part(flag, 0x8fb27a, 0.7, 0.4, 0.04, 0.35);
+  part(flag, 0xeeeae0, 0.3, 0.08, 0.05, 0.38, 0.16);                                          // a white bar on the flag
   V.scene.add(g); return g;
 }
 
+/** The gunship: a slim fuselage with a glazed nose, stub wings and rocket pods, skids, a tail fin,
+ *  a four-bladed main rotor over a faint blur disc, and a tail rotor. Nose at +z. */
 function makeHeli(): TGroup {
   const g = new THREE.Group();
-  part(g, 0x3f4a3a, 0.8, 0.7, 2.0, 0, -0.35);
-  part(g, 0x3f4a3a, 0.2, 0.2, 2.0, 0, 0, -1.8);
-  part(g, 0x2b3438, 0.7, 0.35, 0.6, 0, -0.1, 0.75);
-  const rotor = part(g, 0x222222, 4.2, 0.04, 0.2, 0, 0.45); rotor.name = 'rotor';
+  const olive = 0x3f4a3a, dark = 0x2f382c;
+  mesh(g, vgeo('heliBody', () => profileGeo([[-0.9, -0.55], [0.7, -0.55], [1.15, -0.3], [1.1, -0.05], [0.6, 0.15], [-0.6, 0.2], [-0.95, -0.1]], 0.62)), olive);
+  mesh(g, vgeo('heliGlass', () => profileGeo([[0.55, -0.12], [1.12, -0.12], [1.08, -0.04], [0.62, 0.14]], 0.5)), vmat(0x2b3438, { glow: 0x10161a }));
+  part(g, olive, 0.18, 0.2, 2.2, 0, -0.05, -1.95);                                            // tail boom
+  part(g, dark, 0.06, 0.65, 0.4, 0, -0.05, -2.95);                                            // fin
+  part(g, dark, 0.9, 0.04, 0.25, 0, -0.02, -2.6);                                             // stabiliser
+  part(g, dark, 0.4, 0.2, 0.6, 0, 0.18, -0.2);                                                // engine
+  part(g, dark, 1.6, 0.05, 0.35, 0, -0.3, 0.0);                                               // stub wings
+  for (const sx of [-1, 1]) {
+    mesh(g, rollerGeo(0.08, 0.5, 6, true), 0x22231f, sx * 0.72, -0.38, 0.05);                 // rocket pods
+    part(g, 0x22231f, 0.04, 0.04, 1.6, sx * 0.38, -0.9, 0.1);                                  // skids
+    for (const z of [-0.3, 0.45]) part(g, 0x22231f, 0.03, 0.35, 0.03, sx * 0.3, -0.9, z);
+  }
+  const rotor = new THREE.Group(); rotor.name = 'rotor'; rotor.position.y = 0.45; g.add(rotor);
+  part(rotor, 0x222222, 0.14, 0.1, 0.14);
+  for (const a of [0, Math.PI / 2]) { const b = part(rotor, 0x222222, 4.4, 0.03, 0.16, 0, 0.08); b.rotation.y = a; }
+  const disc = new THREE.Mesh(vgeo('rotorDisc', () => new THREE.CylinderGeometry(2.2, 2.2, 0.01, 24)), vmat(0x1c1d1a, { opacity: 0.18 }));
+  disc.position.y = 0.53; g.add(disc);
+  const tail = new THREE.Group(); tail.name = 'tailRotor'; tail.position.set(0.08, 0.05, -3.0); g.add(tail);
+  for (const a of [0, Math.PI / 2]) { const b = mesh(tail, vgeo('cbox', () => new THREE.BoxGeometry(1, 1, 1)), 0x222222); b.scale.set(0.03, 0.7, 0.08); b.rotation.x = a; }
+  g.rotation.order = 'YXZ';
   V.scene.add(g); return g;
 }
 
+/** A pair of strike jets, lead and wingman: swept wings, twin fins and a glowing exhaust. Nose at +z. */
 function makeJet(): TGroup {
   const g = new THREE.Group();
-  part(g, 0x6d767a, 0.45, 0.35, 2.6, 0, 0, -0.2);
-  part(g, 0x5d666a, 2.6, 0.08, 0.9, 0, 0.1, -0.3);
-  part(g, 0x5d666a, 0.08, 0.6, 0.5, 0, 0.3, -1.3);
+  const grey = 0x6d767a, dark = 0x4d5559;
+  const wing = vgeo('jetWing', () => planGeo([[0.15, 0.55], [1.55, -0.55], [1.55, -0.85], [0.15, -0.95], [-0.15, -0.95], [-1.55, -0.85], [-1.55, -0.55], [-0.15, 0.55]], 0.06));
+  const tailp = vgeo('jetTail', () => planGeo([[0.1, -1.0], [0.75, -1.45], [0.75, -1.6], [-0.75, -1.6], [-0.75, -1.45], [-0.1, -1.0]], 0.04));
+  const body = vgeo('jetBody', () => new THREE.CylinderGeometry(0.2, 0.24, 2.6, 6).rotateX(Math.PI / 2).translate(0, 0, -0.3));
+  const nose = vgeo('jetNose', () => new THREE.ConeGeometry(0.2, 0.8, 6).rotateX(Math.PI / 2).translate(0, 0, 1.4));
+  const fin = vgeo('jetFin', () => profileGeo([[-1.6, 0], [-0.95, 0], [-1.4, 0.6], [-1.65, 0.6]], 0.04));
+  for (const [ox, oz] of [[0, 0], [2.6, -2.8]]) {
+    const p = new THREE.Group(); p.position.set(ox, oz ? -0.4 : 0, oz); g.add(p);
+    mesh(p, body, grey); mesh(p, nose, dark);
+    mesh(p, wing, grey, 0, -0.05, 0); mesh(p, tailp, dark, 0, 0, 0);
+    for (const sx of [-1, 1]) { const f = mesh(p, fin, dark, sx * 0.16, 0.1, 0); f.rotation.z = -sx * 0.25; }
+    mesh(p, vgeo('jetCanopy', () => new THREE.SphereGeometry(0.16, 6, 4).scale(1, 0.8, 2.6).translate(0, 0.2, 0.55)), vmat(0x2b3438, { glow: 0x10161a }));
+    const flame = mesh(p, vgeo('jetFlame', () => new THREE.ConeGeometry(0.17, 0.8, 6).rotateX(-Math.PI / 2).translate(0, 0, -2.0)), vmat(0xffb04a, { glow: 0xff8a2a, opacity: 0.8 }), 0, 0, 0, false);
+    flame.name = 'flame';
+  }
+  g.rotation.order = 'YXZ';
   V.scene.add(g); return g;
 }
 
@@ -500,6 +651,20 @@ const vehicles = new Map<number, TGroup>();
 const evacMarks = new Map<number, { mark: TGroup; vehicle: TGroup }>();
 const helis = new Map<Gunship, TGroup>();
 const jets = new Map<Strike, TGroup>();
+
+/** Turn wheels and run tracks by how far a vehicle moved since the last frame. */
+function roll(g: TGroup) {
+  const st = g.userData as VehState;
+  const d = Number.isNaN(st.px) ? 0 : Math.hypot(g.position.x - st.px, g.position.z - st.pz) / g.scale.x;
+  st.px = g.position.x; st.pz = g.position.z;
+  if (d > 1) return d; // teleported (reset): not a roll
+  st.roll += d;
+  for (const w of st.wheels) w.rotation.x = st.roll / st.r;
+  st.cleats.forEach((c, k) => { c.position.z = 1.1 - ((st.roll + (k % 7) * 0.33) % 2.3); });
+  return d;
+}
+
+const ease = (u: number) => u * u * (3 - 2 * u);
 
 function drawVehicles(time: number) {
   const live = new Set<number>();
@@ -510,8 +675,17 @@ function drawVehicles(time: number) {
     if (!g) { g = makeVehicle(u.kind); vehicles.set(u.id, g); }
     g.position.set(u.x, 0, u.z);
     g.rotation.y += (((u.hd - g.rotation.y + Math.PI * 3) % (Math.PI * 2)) - Math.PI) * 0.15;
+    const moved = roll(g), st = g.userData as VehState;
+    g.position.y = moved > 0.001 ? Math.abs(Math.sin(time * 18 + u.id)) * 0.02 : 0; // a little jolt on the move
     const tur = g.getObjectByName('turret');
     if (tur && u.aim) tur.rotation.y = Math.atan2(u.aim.x - u.x, u.aim.z - u.z) - g.rotation.y;
+    // the main gun kicks back as it fires
+    const m = u.members[0], dt = Math.max(0, time - st.t); st.t = time;
+    if (m && m.cd > st.cd + 0.05 && m.cd > 0.3) st.kick = 1; // its cooldown jumped: it just fired
+    if (m) st.cd = m.cd;
+    st.kick = Math.max(0, st.kick - dt * 4);
+    if (st.barrel) st.barrel.position.z = (u.kind === 'tank' ? 0.55 : 0.22) - st.kick * (u.kind === 'tank' ? 0.22 : 0.06);
+    const aerial = g.getObjectByName('aerial'); if (aerial) aerial.rotation.x = Math.sin(time * 9 + u.id) * (moved > 0.001 ? 0.15 : 0.03);
   }
   for (const [id, g] of vehicles) if (!live.has(id)) { V.scene.remove(g); vehicles.delete(id); boomAt(g.position.x, g.position.z, 2.5); }
 
@@ -522,16 +696,38 @@ function drawVehicles(time: number) {
     // the ship or bus pulls away when it departs and comes back before the next run
     const T = Math.min(6, e.interval * 0.3), since = e.interval - e.timer;
     const away = !e.departed ? 0 : since < T ? since / T : since < 2 * T ? 1 - (since - T) / T : 0;
-    if (e.kind === 'harbor') m.vehicle.position.set(e.x + 2, -0.25 + Math.sin(time * 0.9) * 0.05, SEA_Z + 2.4 + away * 30);
-    else { m.vehicle.position.set(e.x + 1.4 + away * 20, 0, e.z); m.vehicle.visible = away < 0.95; }
+    const v = m.vehicle;
+    if (e.kind === 'harbor') {
+      // she swings her bow out to sea as she leaves, and comes back bow first
+      const turn = ease(clamp((away - 0.05) * 3, 0, 1)), leaving = since < T;
+      v.position.set(e.x + 2, -0.25 + Math.sin(time * 0.9) * 0.05, SEA_Z + 2.4 + away * 30);
+      v.rotation.y = Math.PI / 2 + (leaving ? -1 : 1) * (Math.PI / 2) * turn;
+      v.rotation.z = Math.sin(time * 0.7) * 0.015;
+      const under = away > 0 && away < 1, wake = v.getObjectByName('wake')!;
+      wake.visible = under;
+      if (under) for (let i = 0; i < 6; i++) wake.children[i].scale.x = (1.6 + i * 0.55) * (1 + Math.sin(time * 3 + i) * 0.1);
+      const radar = v.getObjectByName('radar'); if (radar) radar.rotation.y = time * 1.5;
+      // a wisp from the funnel at the quay, a plume under way
+      const smoke = v.getObjectByName('smoke')!, plume = under ? 1 : 0.45;
+      smoke.children.forEach((p, i) => {
+        const u = (time * 0.2 + i / 5) % 1, s = (0.3 + u * 0.9) * plume;
+        p.position.set(Math.sin(i * 2 + u * 3) * 0.2, 3.7 + u * 2.5 * plume, -5.45 - u * 2.2 * plume);
+        p.scale.setScalar(s);
+      });
+    } else {
+      v.position.set(e.x + 1.4 + away * 20, 0, e.z); v.visible = away < 0.95;
+      roll(v);
+    }
   }
 
   const liveH = new Set<Gunship>();
   for (const s of G.gunships) {
     liveH.add(s);
     let h = helis.get(s); if (!h) { h = makeHeli(); helis.set(s, h); }
-    h.position.set(s.hx, 6, s.hz); h.rotation.y = -s.ang; h.rotation.z = 0.15;
+    // circling: nose down a touch and banked into the turn
+    h.position.set(s.hx, 6 + Math.sin(time * 1.3) * 0.08, s.hz); h.rotation.set(0.12, -s.ang, -0.22);
     const r = h.getObjectByName('rotor'); if (r) r.rotation.y = time * 25;
+    const t = h.getObjectByName('tailRotor'); if (t) t.rotation.x = time * 40;
   }
   for (const [s, h] of helis) if (!liveH.has(s)) { V.scene.remove(h); helis.delete(s); }
 
@@ -542,7 +738,8 @@ function drawVehicles(time: number) {
     let j = jets.get(s); if (!j) { j = makeJet(); jets.set(s, j); }
     const along = (1.5 - s.t) * 22 - 22, dx = Math.cos(s.dir + Math.PI / 2), dz = Math.sin(s.dir + Math.PI / 2);
     j.position.set(s.x + dx * along, 9, s.z + dz * along);
-    j.rotation.y = Math.atan2(dx, dz);
+    j.rotation.set(0, Math.atan2(dx, dz), Math.sin(time * 1.7 + s.dir) * 0.12);
+    j.traverse(o => { if (o.name === 'flame') o.scale.z = 0.8 + Math.random() * 0.5; });
   }
   for (const [s, j] of jets) if (!liveJ.has(s)) { V.scene.remove(j); jets.delete(s); }
 }
