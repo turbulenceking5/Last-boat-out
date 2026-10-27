@@ -54,6 +54,9 @@ const LANDMARKS: Record<string, [Landmark, string]> = {
   '0,3': ['station', 'Central Station'], '3,4': ['townhall', 'City Hall'], '5,0': ['stadium', 'Calder Park Stadium'],
 };
 
+/** People sheltering in the landmarks that hold more than their district would. */
+const LANDMARK_POP: Partial<Record<Landmark, number>> = { stadium: 1400, station: 800, cathedral: 1200 };
+
 function generateCity(rnd: () => number) {
   G.grid.fill(Cell.Road);
   G.blockAt.fill(-1);
@@ -73,8 +76,8 @@ function generateCity(rnd: () => number) {
     if (x0 < RIVER_X0 && x1 > RIVER_X0) x1 = RIVER_X0;
     if (x0 <= RIVER_X1 && x1 > RIVER_X1 + 1) x0 = RIVER_X1 + 1;
     const w = x1 - x0;
-    const popMax = Math.round(POP[district] * (0.8 + rnd() * 0.4) / PER_AGENT) * PER_AGENT;
     const lm = LANDMARKS[`${bx},${bz}`];
+    const popMax = Math.round(((lm && LANDMARK_POP[lm[0]]) ?? POP[district]) * (0.8 + rnd() * 0.4) / PER_AGENT) * PER_AGENT;
     const b: Block = {
       id, bx, bz, x0, z0, w, d, name: lm ? lm[1] : names[id % names.length], landmark: lm ? lm[0] : undefined, district,
       pop: popMax, popMax, evacuating: false, fallen: false, emitT: 0, doors: [], buildings: [], lastPanicCheck: 0, breach: 0, convertT: 0,

@@ -3,7 +3,8 @@
 
 // ---- the grid ----
 // The city is a grid of 1-unit cells. Roads are 2 cells wide every 8 cells; the blocks between are 6x6.
-// The harbour quay runs along the south, and the sea beyond it.
+// The harbour quay runs along the south, and the sea beyond it. The river (columns 55-58, see citygen.ts)
+// is Sea cells, so nothing walks in it; its bridges are ordinary Road and Quay cells.
 const W = 74, H = 70;
 const QUAY_Z = 58, SEA_Z = 64;
 const enum Cell { Road, Building, Park, Quay, Sea, Base }
