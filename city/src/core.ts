@@ -16,12 +16,26 @@ const INF = 1e9;
 
 type District = 'downtown' | 'residential' | 'suburb' | 'industrial' | 'docks' | 'park' | 'base' | 'hospital';
 
-interface Building { x: number; z: number; w: number; d: number; h: number; color: number; roof: number; kind: 'tower' | 'flat' | 'house' | 'shed' | 'tank' }
+/**
+ * One piece of a building, a box centred on (x, z) and standing on the ground (or at y).
+ * tower and flat get a roof cap and window bands; house and shed get a pitched roof (roofH high, ridge along the
+ * longer side); tank and chimney are cylinders; box is a plain box (containers, canopies, rooftop plant);
+ * spire is a cone; dome a half-sphere. ry turns it about its centre.
+ */
+interface Building {
+  x: number; z: number; w: number; d: number; h: number; color: number; roof: number;
+  kind: 'tower' | 'flat' | 'house' | 'shed' | 'tank' | 'box' | 'chimney' | 'spire' | 'dome';
+  y?: number; ry?: number; roofH?: number;
+}
+/** Blocks that are drawn as something special. */
+type Landmark = 'stadium' | 'cathedral' | 'station' | 'market' | 'hospital' | 'victory' | 'millbrook' | 'base' | 'townhall';
 
 interface Block {
   id: number;
   bx: number; bz: number;           // block coordinates
   x0: number; z0: number;           // first cell
+  w: number; d: number;             // footprint in cells (6 x 6, or 5 x 6 where the river trims a block)
+  landmark?: Landmark;
   name: string;
   district: District;
   pop: number; popMax: number;      // people living here
