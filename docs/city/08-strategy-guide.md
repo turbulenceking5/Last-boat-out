@@ -1,16 +1,16 @@
 # Strategy guide
 
-What works, according to the scripted players in `tests/city.js` (4 seeded games each; 10 games in brackets):
+What works, according to the scripted players in `tests/city.js` (10 seeded games each, on the current map with the river):
 
-| Approach | Saved |
-|---|---|
-| Do nothing | 18.7% (17.9%) |
-| Evacuate every block at once | 32.1% (32.1%) |
-| Steady: bus points early, evacuate in waves, infantry screening the east, a tank and gunships | 52.7% (49.9%) |
-| Missions: steady, plus chasing every mission and running two APCs | 58.1% (59.4%) |
-| Active: missions, plus answering decisions, using abilities, taking VIPs home and reinforcing | 61.7% (61.5%) |
+| Approach | Saved | Single games |
+|---|---|---|
+| Do nothing | 17.2% | 12 to 21% |
+| Evacuate every block at once | 33.1% | 33% |
+| Steady: bus points early, evacuate in waves, infantry screening the east, a tank and gunships | 53.5% | 39 to 68% |
+| Missions: steady, plus chasing every mission and running two APCs | 59.0% | 44 to 75% |
+| Active: missions, plus answering decisions, using abilities, taking VIPs home and reinforcing | 68.1% | 55 to 80% |
 
-Single games vary a lot, from about 40% to 75% for the same player, depending on where the outbreaks start.
+Single games vary a lot for the same player, depending on where the outbreaks start and the missions appear.
 
 ## Lessons
 

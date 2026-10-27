@@ -32,6 +32,7 @@ Strategies take `(C, t, s, lib)`: the `City` hooks, game time, their own state, 
 | Crowd limits at evacuation points | 23.0% | 32.5% | 50.8% | |
 | Special infected, missions, APC rescues, the great horde | 19.7% | 32.1% | 51.7% | 64.5% | |
 | Abilities, ranks, decisions, new missions, late rooftop survivors | 18.7% | 32.1% | 52.7% | 58.1% | 61.7% |
+| All of the above with the River Calder, landmarks and new models (10 games) | 17.2% | 33.1% | 53.5% | 59.0% | 68.1% |
 
 The 4-game means swing by several points with any change to the random sequence, so compare over 10 games too. Over seeds 1 to 10 in the abilities round: nothing 17.9%, evacAll 32.1%, steady 49.9%, missions 59.4%, active 61.5%.
 
