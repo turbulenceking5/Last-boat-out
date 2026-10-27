@@ -261,7 +261,7 @@ function generateCity(rnd) {
 }
 const PAL = {
     stone: 0xc9c1ab, sand: 0xd8cbb0, cream: 0xe4dfcf, brick: 0xa0644a, brick2: 0x8a5a44, slate: 0x7d8790, glass: 0x8fa3ad,
-    concrete: 0xa9a59a, rust: 0x9a6b4a, white: 0xeeeae0, roofRed: 0x8a4b3a, roofGrey: 0x5d6b72, roofBrown: 0x6e5a48, tar: 0x4a4a46,
+    concrete: 0xa9a59a, tankPaint: 0xb3ad9c, rust: 0x9a6b4a, white: 0xeeeae0, roofRed: 0x8a4b3a, roofGrey: 0x5d6b72, roofBrown: 0x6e5a48, tar: 0x4a4a46,
 };
 const pick = (rnd, a) => a[Math.floor(rnd() * a.length)];
 /** Lay out the buildings inside a block's 6x6 footprint. */
@@ -292,9 +292,9 @@ function furnish(b, rnd) {
             break;
         case 'industrial':
             add(2.4, 2.2, 4.2, 3.6, 2.2 + rnd() * 0.8, pick(rnd, [PAL.concrete, PAL.rust]), PAL.roofGrey, 'shed');
-            add(4.9, 4.9, 1.6, 1.6, 1.8, PAL.white, PAL.concrete, 'tank');
+            add(4.9, 4.9, 1.6, 1.6, 1.8, PAL.tankPaint, PAL.concrete, 'tank');
             if (rnd() < 0.6)
-                add(1.6, 5.0, 1.4, 1.4, 1.5, PAL.white, PAL.concrete, 'tank');
+                add(1.6, 5.0, 1.4, 1.4, 1.5, PAL.tankPaint, PAL.concrete, 'tank');
             break;
         case 'docks':
             add(3, 1.6, 5.4, 2.4, 2.0, pick(rnd, [PAL.rust, PAL.concrete, PAL.brick2]), PAL.roofGrey, 'shed');
@@ -324,9 +324,12 @@ const STEP = 1 / 20;
 const BREACH = 25; // zombie-seconds of battering before a block's doors give way
 const CONVERT_EVERY = 5; // once inside, one figure's worth of people is caught this often
 const EMIT_EVERY = 2; // an evacuating block lets one figure's worth of people out this often
+const WAVE_AT = 8 * 60; // the great horde reaches the eastern edge
+const WAVE_SIZE = 220;
+const APC_CAP = 60;
 const fieldCache = new Map();
 const doorField = new Float32Array(W * H);
-let panicSaid = 0, busSaid = 0; // routine messages are rationed so the log stays readable
+let panicSaid = 0, busSaid = 0, crowdSaid = 0; // routine messages are rationed so the log stays readable
 let zFieldT = 0, unitCount = { militia: 0, infantry: 0, apc: 0, tank: 0 };
 function newGame(seed) {
     const rnd = seeded(seed);
@@ -336,13 +339,15 @@ function newGame(seed) {
         blocks: [], zeds: [], civs: [], units: [], evacs: [], strikes: [], gunships: [], tracers: [], booms: [],
         zField: new Float32Array(W * H), eField: new Float32Array(W * H), eFieldDirty: true,
         t: 0, speed: 1, funds: 1500, hq: 0,
-        stats: { evacuated: 0, dead: 0, killed: 0, unitsLost: 0, spent: 0, total: 0 },
+        stats: { evacuated: 0, dead: 0, killed: 0, unitsLost: 0, spent: 0, total: 0, missions: 0, ferried: 0 },
         over: null, log: [], nextId: 1, sparks: [150, 320, 500], zedSpeed: 1, changed: true,
+        missions: [], nextMission: 55, waveAt: WAVE_AT, sfx: [], shake: 0, alert: null,
     };
     fieldCache.clear();
     zFieldT = 0;
     panicSaid = 0;
     busSaid = 0;
+    crowdSaid = 0;
     unitCount = { militia: 0, infantry: 0, apc: 0, tank: 0 };
     generateCity(seeded(20261027)); // the same streets every game; the outbreak and its timing vary
     G.stats.total = G.blocks.reduce((a, b) => a + b.popMax, 0);
@@ -367,12 +372,20 @@ function outbreak(b, n) {
     b.evacuating = true;
 }
 const SHIRTS = [0x6a4f45, 0x5b6470, 0x7a6a50, 0x4d5a4a, 0x8a3a30, 0x6b6b6b, 0x3f4f66];
-/** A new infected. The bitten lie still for a while before they rise (rise = true). */
-function spawnZed(x, z, rise = true) {
+/** A new infected. The bitten lie still for a while before they rise (rise = true). Runners and brutes get commoner as the night goes on. */
+function spawnZed(x, z, rise = true, kind) {
     if (G.zeds.length >= MAX_ZOMBIES)
-        return;
-    const r = G.rnd;
-    G.zeds.push({ x, z, hp: 3, cd: 0.5 + r(), sp: 0.55 + r() * 0.45, ph: r() * 100, hd: r() * 6, shirt: SHIRTS[Math.floor(r() * SHIRTS.length)], wx: x, wz: z, rise: rise ? 10 + r() * 8 : 0 });
+        return null;
+    const r = G.rnd, late = G.t / GAME_SECONDS;
+    if (kind === undefined) {
+        const k = r();
+        kind = k < 0.02 + late * 0.03 ? 2 /* ZedKind.Brute */ : k < 0.08 + late * 0.1 ? 1 /* ZedKind.Runner */ : 0 /* ZedKind.Walker */;
+    }
+    const hp = kind === 2 /* ZedKind.Brute */ ? 16 : kind === 1 /* ZedKind.Runner */ ? 1.5 : 3;
+    const sp = kind === 2 /* ZedKind.Brute */ ? 0.45 + r() * 0.15 : kind === 1 /* ZedKind.Runner */ ? 1.6 + r() * 0.4 : 0.55 + r() * 0.45;
+    const zd = { x, z, hp, cd: 0.5 + r(), sp, ph: r() * 100, hd: r() * 6, shirt: kind === 1 /* ZedKind.Runner */ ? 0x9a3328 : SHIRTS[Math.floor(r() * SHIRTS.length)], wx: x, wz: z, rise: rise ? 10 + r() * 8 : 0, kind, march: false };
+    G.zeds.push(zd);
+    return zd;
 }
 const CIV_COLORS = [0xe9e3cf, 0x7f93a6, 0xb8865b, 0xc9b99a, 0x9a6b8a, 0x6f8f6a, 0xd2a65a];
 function spawnCiv(x, z) {
@@ -388,7 +401,7 @@ function spawnUnit(kind, from, goal, name) {
     unitCount[kind]++;
     const u = {
         id: G.nextId++, kind, name: name !== null && name !== void 0 ? name : `${s.name} ${unitCount[kind]}`, x: ci(from) + 0.5, z: cj(from) + 0.5, hd: 0,
-        members, goal: -1, field: null, aim: null, kills: 0, people: kind === 'militia' ? s.members * PER_AGENT : 0,
+        members, goal: -1, field: null, aim: null, kills: 0, people: kind === 'militia' ? s.members * PER_AGENT : 0, cargo: 0, loadT: 0,
     };
     G.units.push(u);
     if (goal >= 0)
@@ -502,6 +515,9 @@ function tick(dt) {
         G.sparks.shift();
         spark();
     }
+    updateWave();
+    updateMissions(dt);
+    G.shake = Math.max(0, G.shake - dt * 2);
     for (const b of G.blocks)
         updateBlock(b, dt);
     for (const c of G.civs)
@@ -538,6 +554,13 @@ function tick(dt) {
         if (before && !u.members.length) {
             G.stats.unitsLost++;
             say(`${u.name} has been wiped out.`, 'bad');
+            if (u.cargo) {
+                G.stats.dead += u.cargo;
+                say(`${u.cargo} civilians aboard ${u.name} were lost with it.`, 'bad');
+                u.cargo = 0;
+            }
+            if (UNITS[u.kind].vehicle)
+                G.sfx.push({ k: 'boom', x: u.x, z: u.z });
         }
     }
     G.units = G.units.filter(u => u.members.length);
@@ -547,6 +570,8 @@ function tick(dt) {
     for (const b of G.booms)
         b.t -= dt;
     G.booms = G.booms.filter(b => b.t > 0);
+    if (G.sfx.length > 300)
+        G.sfx.splice(0, G.sfx.length - 300); // nobody is listening (tests)
     if (G.t >= GAME_SECONDS)
         finish('time');
     else if (G.t > 5 && G.blocks.every(b => b.pop <= 0) && !G.civs.length && G.evacs.every(e => e.queue <= 0))
@@ -569,6 +594,9 @@ function rebuildZField() {
     for (const e of G.evacs)
         if (e.queue > 0)
             src.push(e.cell);
+    for (const m of G.missions)
+        if (m.kind === 'survivors')
+            src.push(cellOf(m.x, m.z));
     for (const b of G.blocks)
         if (b.pop > 0)
             for (const d of b.doors)
@@ -666,13 +694,27 @@ function updateZed(z, dt) {
             z.cd = 0.9;
             return;
         }
+        for (const ms of G.missions) {
+            if (ms.kind !== 'survivors' || ms.people <= 0 || dist2(ms.x, ms.z, z.x, z.z) > 1.4)
+                continue;
+            z.cd = 0.9;
+            if (G.t < ms.biteT)
+                return;
+            ms.biteT = G.t + 1;
+            ms.people -= PER_AGENT;
+            G.stats.dead += PER_AGENT;
+            spawnZed(z.x, z.z);
+            return;
+        }
         for (const u of G.units) {
             if (dist2(u.x, u.z, z.x, z.z) > 9)
                 continue;
             const m = u.members.find(m => m.hp > 0 && dist2(m.x, m.z, z.x, z.z) < (UNITS[u.kind].vehicle ? 1.1 : 0.6));
             if (m) {
-                m.hp -= 1;
+                m.hp -= z.kind === 2 /* ZedKind.Brute */ ? (UNITS[u.kind].vehicle ? 5 : 2) : 1;
                 z.cd = 1.0;
+                if (z.kind === 2 /* ZedKind.Brute */ && UNITS[u.kind].vehicle)
+                    G.sfx.push({ k: 'crunch', x: z.x, z: z.z });
                 if (m.hp <= 0 && !UNITS[u.kind].vehicle && G.rnd() < 0.5)
                     spawnZed(m.x, m.z); // the fallen get back up
                 return;
@@ -684,8 +726,10 @@ function updateZed(z, dt) {
             blk.evacuating = true;
             // the doors hold for a while; once they give, people inside are caught a few at a time
             if (blk.breach < BREACH) {
-                blk.breach += 1;
+                blk.breach += z.kind === 2 /* ZedKind.Brute */ ? 6 : 1;
                 z.cd = 1;
+                if (z.kind === 2 /* ZedKind.Brute */)
+                    G.sfx.push({ k: 'crunch', x: z.x, z: z.z });
                 return;
             }
             z.cd = 1;
@@ -711,8 +755,10 @@ function updateZed(z, dt) {
                 e.queue -= PER_AGENT;
                 G.stats.dead += PER_AGENT;
                 spawnZed(z.x, z.z);
-                if (G.rnd() < 0.08)
+                if (G.t > crowdSaid) {
+                    crowdSaid = G.t + 20;
                     say(`The infected are among the crowd at ${e.kind === 'harbor' ? 'the harbour' : 'a bus stop'}.`, 'bad');
+                }
                 return;
             }
         }
@@ -720,7 +766,8 @@ function updateZed(z, dt) {
     if (z.cd > 0.5)
         return; // still busy with the last bite
     const f = G.zField[cellOf(z.x, z.z)], sp = z.sp * G.zedSpeed * dt;
-    if (f < AGGRO) {
+    if (f < AGGRO + (z.kind === 1 /* ZedKind.Runner */ ? 8 : 0)) {
+        z.march = false;
         const next = downhill(G.zField, z.x, z.z);
         if (next) {
             const j = Math.sin(z.ph + G.t * 0.7) * 0.35;
@@ -738,6 +785,14 @@ function updateZed(z, dt) {
                         break;
                     }
         }
+    }
+    else if (z.march) {
+        // the great horde pours along the streets toward the heart of the city
+        const next = downhill(fieldTo(CITY_HEART), z.x, z.z);
+        if (next)
+            stepToward(z, next[0] + Math.sin(z.ph) * 0.4, next[1] + Math.cos(z.ph) * 0.4, sp * 0.9);
+        else
+            z.march = false;
     }
     else {
         // nothing in reach: shamble about
@@ -776,6 +831,8 @@ function updateUnit(u, dt) {
             }
         }
     }
+    if (u.kind === 'apc' && u.goal < 0)
+        apcCargo(u, dt);
     for (const m of u.members) {
         const tx = u.x + m.ox, tz = u.z + m.oz;
         const gx = walkableAt(tx, tz) ? tx : u.x, gz = walkableAt(tx, tz) ? tz : u.z;
@@ -798,6 +855,7 @@ function updateUnit(u, dt) {
         }
         const hit = G.rnd() < s.acc;
         const tx2 = hit ? target.x : target.x + (G.rnd() - 0.5) * 1.5, tz2 = hit ? target.z : target.z + (G.rnd() - 0.5) * 1.5;
+        G.sfx.push({ k: u.kind === 'tank' ? 'cannon' : u.kind === 'apc' ? 'mg' : 'shot', x: m.x, z: m.z });
         G.tracers.push({ x1: m.x, z1: m.z, y1: s.vehicle ? 0.9 : 0.55, x2: tx2, z2: tz2, t: u.kind === 'tank' ? 0.25 : 0.08, color: u.kind === 'militia' ? 0xffd27a : 0xfff0b0 });
         if (s.splash) {
             G.booms.push({ x: tx2, z: tz2, t: 0.5, size: 1.2 });
@@ -814,6 +872,7 @@ function updateStrike(s, dt) {
     for (let k = 0; k < s.bombs; k++) {
         const o = (k - (s.bombs - 1) / 2) * 1.7, x = s.x + Math.cos(s.dir) * o, z = s.z + Math.sin(s.dir) * o;
         G.booms.push({ x, z, t: 0.9 + k * 0.05, size: 2.6 });
+        G.sfx.push({ k: 'boom', x, z });
         zHash.near(x, z, 2.4, zd => { hitZed(zd, 99, null); });
         cHash.near(x, z, 2.4, c => { if (!c.gone) {
             c.gone = true;
@@ -836,6 +895,7 @@ function updateStrike(s, dt) {
         }
     }
     s.bombs = 0;
+    G.shake = 1;
 }
 function updateGunship(g, dt) {
     g.t -= dt;
@@ -852,6 +912,7 @@ function updateGunship(g, dt) {
     }
     g.cd = 0.1;
     const hit = G.rnd() < 0.8;
+    G.sfx.push({ k: 'mg', x: g.hx, z: g.hz });
     G.tracers.push({ x1: g.hx, z1: g.hz, y1: 6, x2: target.x, z2: target.z, t: 0.07, color: 0xffe08a });
     if (hit)
         hitZed(target, 2, null);
@@ -868,8 +929,10 @@ function updateEvac(e, dt) {
     e.departed++;
     G.stats.evacuated += take;
     G.funds += take * 0.6;
-    if (e.kind === 'harbor')
+    if (e.kind === 'harbor') {
         say(`A ship sails from the harbour with ${take} people aboard.`, 'good');
+        G.sfx.push({ k: 'horn', x: e.x, z: e.z });
+    }
     else if (G.t > busSaid) {
         busSaid = G.t + 30;
         say(`Buses are running: ${take} more people on their way out.`, 'good');
@@ -887,10 +950,163 @@ function finish(why) {
     for (const u of G.units)
         if (u.people > 0)
             G.stats.evacuated += u.people;
+    for (const m of G.missions)
+        if (m.kind === 'survivors')
+            G.stats.dead += m.people; // nobody reached them
+    G.missions = [];
     const pct = (G.stats.evacuated / G.stats.total) * 100;
     const grade = pct >= 60 ? 'Saviour of the city' : pct >= 45 ? 'An orderly withdrawal' : pct >= 30 ? 'A bitter retreat' : 'Catastrophe';
     G.over = { why, pct, grade };
     say(why === 'time' ? 'The last ship has sailed.' : 'There is nobody left in the city to save.', 'key');
+}
+// ---- APC rescues ----
+/** A parked APC beside a populated block takes people aboard; beside an evacuation point it lets them off. */
+function apcCargo(u, dt) {
+    u.loadT -= dt;
+    if (u.loadT > 0)
+        return;
+    u.loadT = 0.5;
+    if (u.cargo > 0) {
+        for (const e of G.evacs)
+            if (dist2(e.x, e.z, u.x, u.z) < 12) {
+                e.queue += u.cargo;
+                G.stats.ferried += u.cargo;
+                say(`${u.name} drops ${u.cargo} people at ${e.kind === 'harbor' ? 'the harbour' : 'the evacuation point'}.`, 'good');
+                G.sfx.push({ k: 'chime', x: u.x, z: u.z });
+                u.cargo = 0;
+                return;
+            }
+    }
+    if (u.cargo >= APC_CAP)
+        return;
+    const i0 = Math.floor(u.x), j0 = Math.floor(u.z);
+    for (let j = j0 - 2; j <= j0 + 2; j++)
+        for (let i = i0 - 2; i <= i0 + 2; i++) {
+            if (!inside(i, j))
+                continue;
+            const b = G.doorOf[idx(i, j)];
+            if (b < 0 || G.blocks[b].pop <= 0)
+                continue;
+            const blk = G.blocks[b], take = Math.min(PER_AGENT, blk.pop, APC_CAP - u.cargo);
+            blk.pop -= take;
+            u.cargo += take;
+            if (u.cargo >= APC_CAP)
+                say(`${u.name} is full: ${u.cargo} people aboard. Drive them to an evacuation point.`, 'key');
+            return;
+        }
+}
+/** Send APCs to the door of a block nearest to them, to load people. */
+function sendToBlock(units, b) {
+    for (const u of units) {
+        let best = -1, bd = INF;
+        for (const d of b.doors) {
+            const dd = dist2(ci(d) + 0.5, cj(d) + 0.5, u.x, u.z);
+            if (dd < bd) {
+                bd = dd;
+                best = d;
+            }
+        }
+        if (best >= 0)
+            sendUnit(u, best);
+    }
+}
+// ---- missions ----
+function updateMissions(dt) {
+    G.nextMission -= dt;
+    if (G.nextMission <= 0 && G.missions.length < 2 && G.t < GAME_SECONDS - 75) {
+        G.nextMission = 55 + G.rnd() * 25;
+        spawnMission();
+    }
+    for (const m of G.missions) {
+        m.t -= dt;
+        const u = G.units.find(u => u.members.some(mb => dist2(mb.x, mb.z, m.x, m.z) < 2.6));
+        if (u && (m.kind === 'crate' || m.people > 0)) {
+            if (m.kind === 'crate') {
+                G.funds += m.reward;
+                say(`${u.name} recovers the supply drop: $${m.reward}.`, 'good');
+            }
+            else {
+                let walk = m.people;
+                if (u.kind === 'apc') {
+                    const take = Math.min(walk, APC_CAP - u.cargo);
+                    u.cargo += take;
+                    walk -= take;
+                }
+                for (let k = 0; k < walk / PER_AGENT; k++)
+                    spawnCiv(m.x + (G.rnd() - 0.5) * 1.2, m.z + (G.rnd() - 0.5) * 1.2);
+                G.funds += m.reward;
+                say(`${u.name} reaches the survivors: ${m.people} people${walk < m.people ? ' climb aboard' : ' head for the evacuation points'}. $${m.reward}.`, 'good');
+                m.people = 0;
+            }
+            G.sfx.push({ k: 'chime', x: m.x, z: m.z });
+            G.stats.missions++;
+            m.t = -1;
+            m.kind = 'crate'; // done
+            continue;
+        }
+        if (m.kind === 'survivors' && m.people <= 0 && m.t > 0) {
+            say('The survivors were overrun before help arrived.', 'bad');
+            m.t = -1;
+            m.kind = 'crate';
+        }
+    }
+    for (const m of G.missions)
+        if (m.t <= 0 && m.t > -1) {
+            if (m.kind === 'survivors') {
+                G.stats.dead += m.people;
+                say(`No one reached the survivors in time. ${m.people} people are lost.`, 'bad');
+            }
+            else
+                say('The supply drop was lost to looters.');
+        }
+    G.missions = G.missions.filter(m => m.t > 0);
+}
+function spawnMission() {
+    // somewhere on the streets, away from the fort and the evacuation points
+    for (let tries = 0; tries < 60; tries++) {
+        const i = 3 + Math.floor(G.rnd() * (W - 6)), j = 3 + Math.floor(G.rnd() * (QUAY_Z - 6)), c = idx(i, j);
+        if (G.grid[c] !== 0 /* Cell.Road */)
+            continue;
+        const x = i + 0.5, z = j + 0.5;
+        if (dist2(x, z, ci(G.hq), cj(G.hq)) < 200 || G.evacs.some(e => dist2(e.x, e.z, x, z) < 64))
+            continue;
+        const survivors = G.rnd() < 0.55;
+        const near = G.blocks.reduce((a, b) => dist2(b.x0 + 3, b.z0 + 3, x, z) < dist2(a.x0 + 3, a.z0 + 3, x, z) ? b : a);
+        const m = { id: G.nextId++, kind: survivors ? 'survivors' : 'crate', x, z, t: survivors ? 75 : 60, people: survivors ? 60 + Math.floor(G.rnd() * 4) * 10 : 0, reward: survivors ? 400 : 700, biteT: 0 };
+        if (survivors)
+            G.stats.total += m.people; // people nobody knew were there
+        G.missions.push(m);
+        say(survivors ? `Survivors are signalling from a rooftop near ${near.name}: ${m.people} people. Get any unit to them in 75 seconds.` : `A supply drop has come down near ${near.name}. Get any unit to it in 60 seconds for $${m.reward}.`, 'key');
+        G.sfx.push({ k: 'chime', x, z });
+        return;
+    }
+}
+// ---- the great horde ----
+const CITY_HEART = idx(37, 30);
+function updateWave() {
+    if (G.waveAt < 0)
+        return;
+    if (G.t >= G.waveAt - 30 && !G.alert) {
+        G.alert = { text: 'A great horde is coming in from the east. 30 seconds.', until: G.t + 8 };
+        say('Aircraft report a great horde crossing the river to the east. It will reach the city in 30 seconds.', 'bad');
+        G.sfx.push({ k: 'alarm', x: 70, z: 30 });
+    }
+    if (G.t < G.waveAt)
+        return;
+    G.waveAt = -1;
+    const roads = [];
+    for (let j = 0; j < QUAY_Z; j++)
+        for (const i of [W - 2, W - 1])
+            if (walkable(idx(i, j)))
+                roads.push(idx(i, j));
+    for (let k = 0; k < WAVE_SIZE; k++) {
+        const c = roads[Math.floor(G.rnd() * roads.length)], r = G.rnd();
+        const zd = spawnZed(ci(c) + G.rnd(), cj(c) + G.rnd(), false, r < 0.06 ? 2 /* ZedKind.Brute */ : r < 0.3 ? 1 /* ZedKind.Runner */ : 0 /* ZedKind.Walker */);
+        if (zd)
+            zd.march = true;
+    }
+    G.alert = { text: 'The horde is in the city.', until: G.t + 5 };
+    say(`The great horde is in the city: about ${WAVE_SIZE * PER_AGENT} infected pouring in from the east.`, 'bad');
 }
 
 // ---- view.ts ----
@@ -1126,9 +1342,12 @@ function drawPeople(time) {
         if (n >= MAX_ZOMBIES)
             break;
         // the newly bitten lie on the ground until they rise; then a shambling lean and bob
-        const down = z.rise > 0, bob = down ? 0.12 : Math.abs(Math.sin(time * 4 + z.ph)) * 0.05, lean = down ? Math.PI / 2 : 0.25 + Math.sin(z.ph) * 0.1;
-        setInst(zBody, n, z.x, bob, z.z, PS, PS, PS, z.hd, lean, z.shirt);
-        setInst(zHead, n, z.x, bob, z.z, PS, PS, PS, z.hd, lean);
+        // brutes are hulking; runners lean hard into a sprint
+        const down = z.rise > 0, runner = z.kind === 1 /* ZedKind.Runner */, s = z.kind === 2 /* ZedKind.Brute */ ? PS * 1.6 : PS;
+        const bob = down ? 0.12 : Math.abs(Math.sin(time * (runner ? 11 : 4) + z.ph)) * (runner ? 0.09 : 0.05);
+        const lean = down ? Math.PI / 2 : runner ? 0.6 : 0.25 + Math.sin(z.ph) * 0.1;
+        setInst(zBody, n, z.x, bob, z.z, s * (z.kind === 2 /* ZedKind.Brute */ ? 1.25 : 1), s, s, z.hd, lean, z.kind === 2 /* ZedKind.Brute */ ? 0x4a3a33 : z.shirt);
+        setInst(zHead, n, z.x, bob, z.z, s, s, s, z.hd, lean);
         n++;
     }
     zBody.count = zHead.count = n;
@@ -1140,6 +1359,16 @@ function drawPeople(time) {
         setInst(cBody, n, c.x, bob, c.z, PS, PS, PS, c.hd, 0.12, c.color);
         setInst(cHead, n, c.x, bob, c.z, PS, PS, PS, c.hd, 0.12);
         n++;
+    }
+    // survivors waiting on a rooftop mission, huddled round their flare
+    for (const m of G.missions) {
+        if (m.kind !== 'survivors')
+            continue;
+        for (let q = 0; q < m.people / PER_AGENT && n < MAX_CIVS; q++, n++) {
+            const a = q * 2.4, r = 0.6 + Math.floor(Math.sqrt(q)) * 0.35, wave = Math.sin(time * 6 + q) * 0.15;
+            setInst(cBody, n, m.x + Math.cos(a) * r, Math.max(0, wave) * 0.3, m.z + Math.sin(a) * r, PS, PS, PS, a + Math.PI, 0, CIV_COLORS[q % CIV_COLORS.length]);
+            setInst(cHead, n, m.x + Math.cos(a) * r, Math.max(0, wave) * 0.3, m.z + Math.sin(a) * r, PS, PS, PS, a + Math.PI);
+        }
     }
     // the crowds waiting at evacuation points, packed in rings round the marker
     for (const e of G.evacs) {
@@ -1268,6 +1497,57 @@ function makeJet() {
     part(g, 0x5d666a, 0.08, 0.6, 0.5, 0, 0.3, -1.3);
     V.scene.add(g);
     return g;
+}
+function makeBeacon(kind) {
+    const g = new THREE.Group();
+    const color = kind === 'crate' ? 0xe2a23a : 0xff6a3a;
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.6, 22, 12, 1, true).translate(0, 11, 0), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    beam.name = 'beam';
+    g.add(beam);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1.4, 0.07, 4, 28).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color }));
+    ring.name = 'ring';
+    ring.position.y = 0.06;
+    g.add(ring);
+    if (kind === 'crate') {
+        part(g, 0x8a6b44, 0.9, 0.7, 0.9);
+        part(g, 0x55633a, 0.95, 0.12, 0.95, 0, 0.35);
+    }
+    else {
+        const flare = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffb08a }));
+        flare.name = 'flare';
+        flare.position.y = 1.8;
+        g.add(flare);
+    }
+    V.scene.add(g);
+    return g;
+}
+const beacons = new Map();
+function drawBeacons(time) {
+    const live = new Set();
+    for (const m of G.missions) {
+        live.add(m.id);
+        let g = beacons.get(m.id);
+        if (!g) {
+            g = makeBeacon(m.kind);
+            beacons.set(m.id, g);
+            g.position.set(m.x, 0, m.z);
+        }
+        const urgent = m.t < 15, pulse = 1 + Math.sin(time * (urgent ? 10 : 4)) * 0.15;
+        const ring = g.getObjectByName('ring');
+        if (ring)
+            ring.scale.setScalar(pulse);
+        const beam = g.getObjectByName('beam');
+        if (beam)
+            beam.material.opacity = 0.16 + Math.max(0, Math.sin(time * 3)) * 0.12;
+        const flare = g.getObjectByName('flare');
+        if (flare)
+            flare.position.y = 1.8 + Math.sin(time * 2) * 0.3;
+    }
+    for (const [id, g] of beacons)
+        if (!live.has(id)) {
+            V.scene.remove(g);
+            beacons.delete(id);
+        }
 }
 const vehicles = new Map();
 const evacMarks = new Map();
@@ -1474,6 +1754,11 @@ function placeCamera() {
     const c = V.cam, h = Math.sin(c.pitch) * c.dist, back = Math.cos(c.pitch) * c.dist;
     V.camera.position.set(c.x - Math.sin(c.yaw) * back, h, c.z + Math.cos(c.yaw) * back);
     V.camera.lookAt(c.x, 0, c.z);
+    if (G.shake > 0) {
+        const k = G.shake * G.shake * 0.5;
+        V.camera.position.x += (Math.random() - 0.5) * k;
+        V.camera.position.y += (Math.random() - 0.5) * k;
+    }
     // keep the shadow map centred on what you are looking at
     V.sun.position.set(c.x + 18, 34, c.z + 10);
     V.sun.target.position.set(c.x, 0, c.z);
@@ -1535,12 +1820,144 @@ function drawFrame(time, dt, sel, selBlock, place) {
     }
     drawPeople(time);
     drawVehicles(time);
+    drawBeacons(time);
     drawTracers();
     drawBooms(dt);
     drawSmoke(time);
     drawMarkers(sel, selBlock, place, time);
     placeCamera();
     V.renderer.render(V.scene, V.camera);
+}
+
+// ---- audio.ts ----
+// Procedural sound with Web Audio: every effect is synthesised, so there are no files to load.
+// The simulation records events in G.sfx; playSfx() drains them each frame, quieter with distance
+// from where the camera is looking, and rate-limited per kind so a firefight doesn't turn to noise.
+const AUD = {
+    ctx: null,
+    master: null,
+    noise: null,
+    muted: false,
+    last: {},
+    groanT: 0,
+};
+try {
+    AUD.muted = localStorage.getItem('lbc-city-muted') === '1';
+}
+catch (e) { /* storage blocked */ }
+/** Audio may only start after a user gesture; called from the first click. */
+function startAudio() {
+    if (AUD.ctx) {
+        if (AUD.ctx.state === 'suspended')
+            AUD.ctx.resume();
+        return;
+    }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC)
+        return;
+    const ctx = new AC();
+    AUD.ctx = ctx;
+    AUD.master = ctx.createGain();
+    AUD.master.gain.value = AUD.muted ? 0 : 0.55;
+    AUD.master.connect(ctx.destination);
+    const buf = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let k = 0; k < d.length; k++)
+        d[k] = Math.random() * 2 - 1;
+    AUD.noise = buf;
+}
+function setMuted(m) {
+    AUD.muted = m;
+    try {
+        localStorage.setItem('lbc-city-muted', m ? '1' : '0');
+    }
+    catch (e) { /* storage blocked */ }
+    if (AUD.master && AUD.ctx)
+        AUD.master.gain.setTargetAtTime(m ? 0 : 0.55, AUD.ctx.currentTime, 0.05);
+}
+function env(g, t, peak, attack, decay) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + attack + decay);
+}
+function noiseBurst(vol, freq, q, attack, decay, type = 'bandpass', sweepTo) {
+    const ctx = AUD.ctx, t = ctx.currentTime, src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = AUD.noise;
+    src.playbackRate.value = 0.8 + Math.random() * 0.4;
+    f.type = type;
+    f.frequency.setValueAtTime(freq, t);
+    f.Q.value = q;
+    if (sweepTo)
+        f.frequency.exponentialRampToValueAtTime(sweepTo, t + attack + decay);
+    env(g, t, vol, attack, decay);
+    src.connect(f);
+    f.connect(g);
+    g.connect(AUD.master);
+    src.start(t, Math.random() * 0.5);
+    src.stop(t + attack + decay + 0.05);
+}
+function tone(vol, type, f0, f1, attack, decay, lowpass = 4000, delay = 0) {
+    const ctx = AUD.ctx, t = ctx.currentTime + delay, o = ctx.createOscillator(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + attack + decay);
+    f.type = 'lowpass';
+    f.frequency.value = lowpass;
+    env(g, t, vol, attack, decay);
+    o.connect(f);
+    f.connect(g);
+    g.connect(AUD.master);
+    o.start(t);
+    o.stop(t + attack + decay + 0.05);
+}
+const GAP = { shot: 0.045, mg: 0.06, cannon: 0.25, boom: 0.08, horn: 2, alarm: 3, chime: 0.3, crunch: 0.2 };
+const SOUND = {
+    shot: v => noiseBurst(0.35 * v, 1700 + Math.random() * 600, 1.2, 0.002, 0.07),
+    mg: v => noiseBurst(0.25 * v, 1100, 1.5, 0.002, 0.05),
+    cannon: v => { noiseBurst(0.7 * v, 400, 0.7, 0.004, 0.45, 'lowpass', 90); tone(0.5 * v, 'sine', 110, 38, 0.005, 0.4); },
+    boom: v => { noiseBurst(1.0 * v, 900, 0.6, 0.006, 1.3, 'lowpass', 70); tone(0.7 * v, 'sine', 80, 28, 0.01, 1.0); },
+    horn: v => { for (const f of [98, 147])
+        tone(0.28 * Math.max(v, 0.35), 'sawtooth', f, f * 0.98, 0.15, 1.6, 600); },
+    alarm: () => { for (let k = 0; k < 3; k++) {
+        tone(0.12, 'square', 520, 860, 0.02, 0.5, 1800, k * 0.9);
+        tone(0.12, 'square', 860, 520, 0.02, 0.38, 1800, k * 0.9 + 0.5);
+    } },
+    chime: () => { tone(0.18, 'sine', 660, 660, 0.01, 0.35); tone(0.15, 'sine', 990, 990, 0.01, 0.5, 4000, 0.12); },
+    crunch: v => noiseBurst(0.45 * v, 300, 2, 0.003, 0.18, 'bandpass', 120),
+};
+/** Play whatever the simulation recorded since the last frame. */
+function playSfx(dt) {
+    var _a, _b;
+    const events = G.sfx;
+    G.sfx = [];
+    if (!AUD.ctx || AUD.muted || AUD.ctx.state !== 'running')
+        return;
+    const now = AUD.ctx.currentTime, cam = V.cam, reach = cam.dist * 0.9 + 12;
+    // keep only the nearest event of each kind this frame
+    const best = {};
+    for (const e of events) {
+        const d = Math.hypot(e.x - cam.x, e.z - cam.z), v = e.k === 'alarm' || e.k === 'horn' || e.k === 'chime' ? 1 : clamp(1 - d / reach, 0, 1) * clamp(40 / cam.dist, 0.35, 1);
+        if (v > ((_a = best[e.k]) !== null && _a !== void 0 ? _a : 0))
+            best[e.k] = v;
+    }
+    for (const k of Object.keys(best)) {
+        if (now - ((_b = AUD.last[k]) !== null && _b !== void 0 ? _b : -9) < GAP[k] || best[k] < 0.04)
+            continue;
+        AUD.last[k] = now;
+        SOUND[k](best[k]);
+    }
+    // now and then, a groan from the infected in view
+    AUD.groanT -= dt;
+    if (AUD.groanT <= 0) {
+        AUD.groanT = 1.5 + Math.random() * 2.5;
+        let near = 0;
+        for (const z of G.zeds)
+            if (dist2(z.x, z.z, cam.x, cam.z) < reach * reach * 0.3 && ++near > 5)
+                break;
+        if (near > 5) {
+            const f = 70 + Math.random() * 40;
+            tone(0.09, 'sawtooth', f, f * 0.7, 0.25, 0.9, 380);
+        }
+    }
 }
 
 // ---- ui.ts ----
@@ -1628,7 +2045,7 @@ function refreshPanel(force) {
     if (UI.sel.length) {
         html = UI.sel.slice(0, 6).map(u => {
             const s = UNITS[u.kind], hp = u.members.reduce((a, m) => a + m.hp, 0), max = s.members * s.hp;
-            return `<div class="unit"><div class="row"><b>${esc(u.name)}</b><span>${s.vehicle ? '' : `${u.members.length}/${s.members} men · `}${u.kills} kills</span></div>${bar(hp, max, hp < max * 0.35 ? 'low' : '')}<p class="note">${u.goal >= 0 ? 'Moving' : 'Holding and firing at anything in range'} · range ${s.range}</p></div>`;
+            return `<div class="unit"><div class="row"><b>${esc(u.name)}</b><span>${s.vehicle ? '' : `${u.members.length}/${s.members} men · `}${u.kills} kills</span></div>${bar(hp, max, hp < max * 0.35 ? 'low' : '')}<p class="note">${u.goal >= 0 ? 'Moving' : 'Holding and firing at anything in range'} · range ${s.range}</p>${u.kind === 'apc' ? `<p class="note">Carrying <b>${u.cargo}</b> of 60 civilians. Tap a block to load people, then tap near an evacuation point to drop them off.</p>` : ''}</div>`;
         }).join('') + (UI.sel.length > 6 ? `<p class="note">and ${UI.sel.length - 6} more</p>` : '') +
             `<p class="note">Tap a street to move. Right-click also moves. Esc to deselect.</p><button data-act="desel" class="btn">Deselect</button>`;
     }
@@ -1649,6 +2066,11 @@ function refreshPanel(force) {
     else {
         html = `<p class="note">Tap a block to evacuate it or raise militia. Tap a unit to command it. Drag to pan, scroll or pinch to zoom.</p>`;
     }
+    const ms = $('#missions');
+    ms.hidden = !G.missions.length;
+    const mHtml = G.missions.length ? `<h2>Missions</h2>` + G.missions.map(m => `<div class="mission"><p>${m.kind === 'crate' ? `Supply drop · $${m.reward}` : `${m.people} survivors · $${m.reward}`} <b class="${m.t < 15 ? 'urgent' : ''}">${Math.ceil(m.t)}s</b></p><button data-act="goto" data-x="${m.x}" data-z="${m.z}">Show</button></div>`).join('') : '';
+    if (ms.innerHTML !== mHtml)
+        ms.innerHTML = mHtml;
     const logHtml = G.log.slice(0, 14).map(l => `<li class="${l.kind}"><time>${fmtTime(GAME_SECONDS - l.t)}</time>${esc(l.text)}</li>`).join('');
     const key = html + logHtml;
     if (!force && key === UI.lastPanelKey)
@@ -1656,6 +2078,7 @@ function refreshPanel(force) {
     UI.lastPanelKey = key;
     $('#sel').innerHTML = html;
     $('#side').classList.toggle('empty', !UI.sel.length && !UI.block && !UI.evac);
+    $('#side').classList.toggle('has-missions', G.missions.length > 0);
     $('#log').innerHTML = logHtml;
 }
 function showOverlay(which) {
@@ -1674,6 +2097,9 @@ function showOverlay(which) {
       <ul><li>People shelter at home until you order a block to evacuate, or the infected come close and they panic. Evacuees walk to the nearest evacuation point and wait for a ship or bus.</li>
       <li>The infected hunt the nearest people: anyone in the streets, crowds at the evacuation points, your troops, and blocks they can break into.</li>
       <li>Your troops fire at anything in range on their own. Money comes in steadily, plus a bounty for every kill and every person evacuated.</li>
+      <li><b>APCs rescue people:</b> select one and tap a block to load up to 60, then tap near an evacuation point to drop them off.</li>
+      <li><b>Missions</b> pop up on the map: supply drops worth money, and survivors on rooftops who need any unit to reach them before the infected do.</li>
+      <li>Watch for <b>runners</b> (fast, red shirts, go down easily) and <b>brutes</b> (huge, soak up fire, smash doors in). At minute 8 a great horde arrives from the east.</li>
       <li>Each figure stands for 10 people.</li></ul>${controls}
       <div class="btns"><button class="btn primary" data-act="${which === 'start' ? 'begin' : 'closehelp'}">${which === 'start' ? 'Take command' : 'Back to the city'}</button><a class="btn" href="../">The original game</a></div></div>`;
     }
@@ -1681,11 +2107,24 @@ function showOverlay(which) {
         const o = G.over, s = G.stats;
         ov.innerHTML = `<div class="card ${o.pct >= 30 ? '' : 'red'}"><span class="eyebrow">${o.why === 'time' ? 'The last ship has sailed' : 'The city is empty'}</span><h1>${esc(o.grade)}</h1>
       <p class="big">${o.pct.toFixed(0)}% of the city saved</p>
-      <div class="stats"><div><b>${fmtPeople(s.evacuated)}</b><span>Evacuated</span></div><div><b>${fmtPeople(s.dead)}</b><span>Dead</span></div><div><b>${s.killed * PER_AGENT}</b><span>Infected destroyed</span></div><div><b>${s.unitsLost}</b><span>Units lost</span></div><div><b>$${s.spent}</b><span>Spent</span></div></div>
+      <div class="stats"><div><b>${fmtPeople(s.evacuated)}</b><span>Evacuated</span></div><div><b>${fmtPeople(s.dead)}</b><span>Dead</span></div><div><b>${s.killed * PER_AGENT}</b><span>Infected destroyed</span></div><div><b>${s.unitsLost}</b><span>Units lost</span></div><div><b>${s.missions}</b><span>Missions done</span></div><div><b>${fmtPeople(s.ferried)}</b><span>Rescued by APC</span></div><div><b>$${s.spent}</b><span>Spent</span></div></div>
       <p class="note">Grades: 60% Saviour of the city, 45% An orderly withdrawal, 30% A bitter retreat.</p>
       <div class="btns"><button class="btn primary" data-act="again">Play again</button><a class="btn" href="../">The original game</a></div></div>`;
     }
     (_a = ov.querySelector('.btn.primary')) === null || _a === void 0 ? void 0 : _a.focus();
+}
+function syncMute() {
+    const b = document.getElementById('mute');
+    if (b) {
+        b.textContent = AUD.muted ? '🔇' : '🔊';
+        b.setAttribute('aria-label', AUD.muted ? 'Sound off' : 'Sound on');
+    }
+}
+function updateAlert() {
+    const el = $('#alert'), on = !!G.alert && G.t < G.alert.until;
+    if (on && el.textContent !== G.alert.text)
+        el.textContent = G.alert.text;
+    el.hidden = !on;
 }
 function pickUnit(x, z) {
     let best = null, bd = 2.2;
@@ -1734,6 +2173,16 @@ function tapAt(clientX, clientY, right, shift) {
         moveUnits(UI.sel, p.x, p.z);
         return;
     }
+    const apcs = UI.sel.filter(u => u.kind === 'apc');
+    if (apcs.length && bi >= 0 && G.blocks[bi].pop > 0) {
+        sendToBlock(apcs, G.blocks[bi]);
+        toast(`APC heading to ${G.blocks[bi].name} to take people aboard.`);
+        return;
+    }
+    if (UI.sel.length && e) {
+        moveUnits(UI.sel, e.x, e.z);
+        return;
+    }
     UI.sel = [];
     UI.block = bi >= 0 && G.blocks[bi].district !== 'park' ? G.blocks[bi] : null;
     UI.evac = UI.block ? null : e !== null && e !== void 0 ? e : null;
@@ -1744,6 +2193,7 @@ function bindInput(canvas) {
     let pinch = 0;
     canvas.addEventListener('contextmenu', e => e.preventDefault());
     canvas.addEventListener('pointerdown', e => {
+        startAudio();
         canvas.setPointerCapture(e.pointerId);
         ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, moved: false });
         if (ptrs.size === 2) {
@@ -1798,11 +2248,21 @@ function bindInput(canvas) {
         }
         switch (t.dataset.act) {
             case 'begin':
+                startAudio();
+                showOverlay('');
+                break;
             case 'closehelp':
                 showOverlay('');
                 break;
             case 'help':
                 showOverlay('help');
+                break;
+            case 'mute':
+                setMuted(!AUD.muted);
+                syncMute();
+                break;
+            case 'goto':
+                Object.assign(V.cam, { x: Number(t.dataset.x), z: Number(t.dataset.z), dist: Math.min(V.cam.dist, 40) });
                 break;
             case 'again':
                 newGame(Math.floor(Math.random() * 1e9));
@@ -1877,6 +2337,11 @@ function bindInput(canvas) {
             showOverlay('help');
             return;
         }
+        if (k === 'm') {
+            setMuted(!AUD.muted);
+            syncMute();
+            return;
+        }
         if (k === '+' || k === '=') {
             G.speed = Math.min(4, Math.max(1, G.speed * 2));
             return;
@@ -1925,6 +2390,9 @@ function resetView() {
     for (const j of jets.values())
         V.scene.remove(j);
     jets.clear();
+    for (const b of beacons.values())
+        V.scene.remove(b);
+    beacons.clear();
     G.changed = true;
     setMode(null);
     refreshPanel(true);
@@ -1941,6 +2409,7 @@ function resetView() {
     }
     const panKeys = bindInput(V.renderer.domElement);
     buildBar();
+    syncMute();
     refreshPanel(true);
     showOverlay('start');
     addEventListener('resize', resizeView);
@@ -1966,13 +2435,15 @@ function resetView() {
             showOverlay('end');
         const place = UI.mode && UI.hover ? { x: UI.hover.x, z: UI.hover.z, r: PLACE_R[UI.mode], ok: G.funds >= ORDER_COST[UI.mode] } : null;
         drawFrame(G.t, gameDt, UI.sel, UI.block, place);
+        playSfx(real);
+        updateAlert();
         updateHud(now);
         requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
     // hooks for automated tests
     window.City = {
-        get G() { return G; }, tick, order, moveUnits, evacuateBlock, UI, showOverlay,
+        get G() { return G; }, tick, order, moveUnits, evacuateBlock, sendToBlock, UI, showOverlay,
         reset(seed) { newGame(seed); resetView(); showOverlay(''); },
         look(x, z, dist) { Object.assign(V.cam, { x, z, dist }); },
     };

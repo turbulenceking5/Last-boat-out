@@ -6,6 +6,7 @@
   if (!initView($('#view'))) { document.documentElement.classList.add('no3d'); return; }
   const panKeys = bindInput(V.renderer.domElement);
   buildBar();
+  syncMute();
   refreshPanel(true);
   showOverlay('start');
   addEventListener('resize', resizeView);
@@ -25,6 +26,8 @@
     if (G.over && UI.overlay !== 'end') showOverlay('end');
     const place = UI.mode && UI.hover ? { x: UI.hover.x, z: UI.hover.z, r: PLACE_R[UI.mode], ok: G.funds >= ORDER_COST[UI.mode] } : null;
     drawFrame(G.t, gameDt, UI.sel, UI.block, place);
+    playSfx(real);
+    updateAlert();
     updateHud(now);
     requestAnimationFrame(frame);
   }
@@ -32,7 +35,7 @@
 
   // hooks for automated tests
   (window as unknown as { City: unknown }).City = {
-    get G() { return G; }, tick, order, moveUnits, evacuateBlock, UI, showOverlay,
+    get G() { return G; }, tick, order, moveUnits, evacuateBlock, sendToBlock, UI, showOverlay,
     reset(seed: number) { newGame(seed); resetView(); showOverlay(''); },
     look(x: number, z: number, dist: number) { Object.assign(V.cam, { x, z, dist }); },
   };

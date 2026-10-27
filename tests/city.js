@@ -21,9 +21,29 @@ const STRATS = {
       C.order('gunship', x / G.zeds.length, z / G.zeds.length, null);
     }
   },
+  // steady, plus the new verbs: chase every mission with the nearest free unit, and run APC rescues
+  active: (C, t, s, steady) => {
+    const G = C.G;
+    if (!s.init) { s.init = 1; s.steady = {}; s.apcs = 0; s.tick = 0; }
+    steady(C, t, s.steady);
+    if (G.funds >= 700 && s.apcs < 2 && t > 20) { C.order('apc', 33, 49, null); s.apcs++; }
+    if ((s.tick = (s.tick || 0) + 1) % 40) return;
+    const d2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
+    for (const m of G.missions) {
+      if (G.units.some(u => u.goal >= 0 && u._mission === m.id)) continue;
+      const u = G.units.filter(u => u.kind !== 'apc' && u._mission === undefined).sort((a, b) => d2(a, m) - d2(b, m))[0];
+      if (u) { u._mission = m.id; C.moveUnits([u], m.x, m.z); }
+    }
+    for (const u of G.units) if (u._mission !== undefined && !G.missions.some(m => m.id === u._mission) && u.goal < 0) delete u._mission;
+    for (const u of G.units.filter(u => u.kind === 'apc' && u.goal < 0)) {
+      if (u.cargo >= 50) { const e = G.evacs.slice().sort((a, b) => d2(a, u) - d2(b, u))[0]; C.moveUnits([u], e.x, e.z); continue; }
+      const b = G.blocks.filter(b => b.pop > 0 && !b.fallen).sort((a, b2) => d2({ x: a.x0 + 3, z: a.z0 + 3 }, u) - d2({ x: b2.x0 + 3, z: b2.z0 + 3 }, u))[0];
+      if (b) C.sendToBlock([u], b);
+    }
+  },
 };
-
-(async () => {
+module.exports = { STRATS };
+if (require.main === module) (async () => {
   const n = Number(process.argv[2]) || 4, names = process.argv.slice(3).length ? process.argv.slice(3) : Object.keys(STRATS);
   const browser = await chromium.launch();
   const page = await browser.newPage();
@@ -34,12 +54,12 @@ const STRATS = {
   for (const name of names) {
     const pcts = [];
     for (let seed = 1; seed <= n; seed++) {
-      pcts.push(await page.evaluate(([seed, src]) => {
+      pcts.push(await page.evaluate(([seed, src, steadySrc]) => {
         const C = window.City; C.reset(seed);
-        const strat = eval(src), s = {};
-        for (let i = 0; i < 12 * 60 * 20 + 20 && !C.G.over; i++) { strat(C, C.G.t, s); C.tick(1 / 20); }
+        const strat = eval(src), steady = eval(steadySrc), s = {};
+        for (let i = 0; i < 12 * 60 * 20 + 20 && !C.G.over; i++) { strat(C, C.G.t, s, steady); C.tick(1 / 20); }
         return C.G.over.pct;
-      }, [seed, STRATS[name].toString()]));
+      }, [seed, STRATS[name].toString(), STRATS.steady.toString()]));
     }
     const mean = pcts.reduce((a, b) => a + b, 0) / pcts.length;
     console.log(`${name.padEnd(8)} mean ${mean.toFixed(1)}%  [${pcts.map(p => p.toFixed(1)).join(', ')}]`);
