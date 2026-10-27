@@ -35,7 +35,7 @@ Flat roofs carry air handlers and water tanks. The whole city holds about 37,500
 
 | Landmark | Block (column, row) | People | What it is |
 |---|---|---|---|
-| St Brennan's Hospital | 7, 2 | about 700 | An H of white wards with a red cross on the roof and ambulances at the doors. The outbreak starts here, across the river |
+| St Brennan's Hospital | 7, 2 | about 700 | An H of white wards with a green first-aid cross on the roof and ambulances at the doors. The outbreak starts here, across the river |
 | Calder Cathedral | 3, 3 | about 1,200 | Twin west towers, a nave and transept, an apse and a green spire over the crossing; people shelter in the nave |
 | City Hall | 3, 4 | about 1,400 | A low domed hall with a portico, so the cathedral can be seen from the south |
 | Market Square | 2, 3 | none | A cobbled square, walkable, with a fountain and four stalls you have to go round. You can put a bus point here |

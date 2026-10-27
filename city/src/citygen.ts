@@ -133,12 +133,12 @@ function furnish(b: Block, rnd: () => number) {
 
   switch (b.landmark) {
     case 'hospital': {
-      // an H of white wards round a taller core, a red cross on the roof, ambulances at the door
+      // an H of white wards round a taller core, a green first-aid cross on the roof (not the protected red cross), ambulances at the door
       add(1.0, 3, 1.8, 5.6, 3.4, PAL.white, PAL.concrete, 'flat');
       add(5.0, 3, 1.8, 5.6, 3.4, PAL.white, PAL.concrete, 'flat');
       add(3, 3, 2.4, 2.4, 4.6, 0xdfe6e4, PAL.concrete, 'flat');
-      add(3, 3, 1.8, 0.55, 0.06, 0xc4332f, 0, 'box', { y: 4.74 });
-      add(3, 3, 0.55, 1.8, 0.06, 0xc4332f, 0, 'box', { y: 4.74 });
+      add(3, 3, 1.8, 0.55, 0.06, 0x3f8f5a, 0, 'box', { y: 4.74 });
+      add(3, 3, 0.55, 1.8, 0.06, 0x3f8f5a, 0, 'box', { y: 4.74 });
       add(3, 0.55, 0.55, 1.0, 0.5, 0xf2f0ea, 0, 'box', { ry: Math.PI / 2 });
       add(3, 5.45, 0.55, 1.0, 0.5, 0xf2f0ea, 0, 'box', { ry: Math.PI / 2 });
       return;
