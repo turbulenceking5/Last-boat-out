@@ -10,6 +10,7 @@ All notable changes, newest first. Dates are when the work was committed.
 - Missions: supply drops for money, and rooftop survivors to reach before the infected do.
 - The great horde: 220 infected arrive from the east at minute 8, after a siren and a 30-second warning.
 - Synthesised sound for gunfire, cannon, explosions, horns, the siren, chimes and groans; camera shake on air strikes; mute with M.
+- A new map: the River Calder crosses the city with four bridges to hold; a stadium, cathedral, City Hall, market square, railway station, a hospital that looks like one, dock cranes and a lighthouse; varied building layouts, street trees, abandoned cars, a richer painted ground, and outskirts beyond the map edge.
 - `tests/city.js` gains an `active` strategy using missions and APCs (64.5% saved).
 
 ### Docs
