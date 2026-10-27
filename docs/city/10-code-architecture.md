@@ -9,7 +9,7 @@ The City is a separate page at `city/`. It is written in TypeScript and loads Th
 | `city/index.html` | The page: markup for the HUD, side panel, build bar and overlays, and all CSS |
 | `city/src/env.d.ts` | Type aliases for Three.js, so the sources can stay plain scripts |
 | `city/src/core.ts` | Constants, data types, the global game state `G`, grid helpers, distance fields, steering and the spatial hash |
-| `city/src/citygen.ts` | Builds the grid, the blocks, their buildings and the trees |
+| `city/src/citygen.ts` | Builds the grid, the river and its bridges, the blocks, their buildings and landmarks, and the scenery (trees, abandoned cars, the outskirts) |
 | `city/src/sim.ts` | The simulation: one fixed step at a time, plus every player order |
 | `city/src/view.ts` | The Three.js scene: ground texture, instanced buildings and people, vehicles, aircraft, effects, camera and picking |
 | `city/src/audio.ts` | Synthesised Web Audio, driven by events the simulation records |

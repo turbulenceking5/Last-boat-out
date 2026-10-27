@@ -7,7 +7,7 @@ Ideas for the City, roughly in order of how much they would add.
 - **Line of sight.** Troops shoot over buildings today. Blocking fire would make street corners matter.
 - **Garrisons.** Put a squad inside a block to defend it, so it holds instead of emptying.
 - **Box selection** and control groups (Ctrl+1 to 9).
-- **Barricades and blown bridges**, as in the original: spend money to block a street.
+- **Barricades and blown bridges**, as in the original: spend money to block a street, or drop one of the four bridges over the Calder.
 - **Night.** Darkness after a set time, with searchlights and flares, as in the original game.
 - **More missions:** escort a convoy, hold a block for a set time, rescue a VIP.
 - **Scenarios and difficulty:** different outbreak sites, cities and harbour capacities.

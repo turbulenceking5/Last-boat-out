@@ -28,7 +28,7 @@ The build bar shows a price in red when you can't afford it, and the game won't 
 
 ## Score
 
-**Share saved = people evacuated ÷ the city's population.** The population is about 38,800 people, plus any survivors found by missions.
+**Share saved = people evacuated ÷ the city's population.** The population is about 37,500 people, plus any survivors found by missions.
 
 Counted as evacuated:
 
